@@ -1,37 +1,161 @@
-# GetSmart
+# → Create PR → Review → Merge to dev/main
+```
 
-Deterministic Parallel Analysis Pipeline for game intelligence reports.
+## 📁 Estructura de Carpetas: Dónde Implementar Skills
 
-Quick start (local development):
+### 🎯 **BACKEND Structure Analysis**
 
-- Ensure you have a PostgreSQL instance (Neon) and populate `DATABASE_URL` in a `.env` file or environment.
-- Backend: see `backend/requirements.txt` and run with Uvicorn.
-- Frontend: use Vite (see `frontend/package.json`).
+**Current Structure:**
+```
+backend/
+├── app/
+│   ├── api/routes.py          ← 🔥 Add skill endpoints here
+│   ├── services/             ← 🔥 Add skill logic here
+│   ├── models/               ← 🔥 Add Pydantic models here
+│   ├── core/config.py        ← Environment config
+│   ├── db/connection.py      ← Database layer
+│   └── main.py               ← FastAPI entrypoint
+├── requirements.txt          ← FastAPI + dependencies
+└── README.md
+```
 
-Specs and contracts live in `openspec/`.
+**🚀 WHERE MACRO-SKILLS GO:**
 
-Onboarding flow for developers:
-1. Read this root README and the OpenSpec configuration in `openspec/config.yaml`.
-2. Do not run `openspec init` unless you are the contract owner or explicitly redesigning the OpenSpec structure.
-3. Validate the spec files before working on implementation:
-   ```powershell
-   npx @fission-ai/openspec@latest validate openspec/
-   ```
-4. Backend developers should focus on:
-   - `backend/app/main.py` — FastAPI app entrypoint
-   - `backend/app/api/routes.py` — API routes
-   - `backend/app/db/connection.py` — database connection
-   - `backend/app/core/config.py` — environment configuration
-   - OpenSpec contracts in:
-     - `openspec/specs/scraper/`
-     - `openspec/specs/macro_skills/`
-     - `openspec/specs/synthesis/`
-5. Frontend developers should focus on:
-   - `frontend/src/index.tsx` — app entrypoint
-   - `frontend/src/modules/auth/login/index.tsx` — login module
-   - `frontend/src/modules/dashboard/index.tsx` — dashboard module
-   - `frontend/src/modules/reports/index.tsx` — reports module
-   - `frontend/src/modules/pipeline/index.tsx` — pipeline control module
-   - OpenSpec UI contract in:
-     - `openspec/specs/ui_and_login/ui_login_contract.md`
-6. After implementation, rerun validation and update the OpenSpec docs only if the contract itself changes.
+```
+backend/app/api/
+├── routes.py                 ← Main router
+├── macro_skills/
+│   ├── ux_skill.py          ← ✅ /api/ux-analysis
+│   ├── design_art_skill.py  ← ✅ /api/design-art-analysis  
+│   ├── tech_systems_skill.py← ✅ /api/tech-analysis
+│   └── strategy_market_skill.py ← ✅ /api/strategy-analysis
+└── synthesis/
+    └── synthesis_skill.py   ← ✅ /api/synthesis
+
+backend/app/services/
+├── macro_skills/
+│   ├── ux_service.py        ← ✅ UX analysis logic
+│   ├── design_art_service.py ← ✅ Design analysis logic
+│   ├── tech_service.py      ← ✅ Tech analysis logic
+│   └── strategy_service.py  ← ✅ Strategy analysis logic
+└── synthesis/
+    └── synthesis_service.py← ✅ Synthesis logic
+
+backend/app/models/
+├── macro_skills/
+│   ├── ux_models.py         ← ✅ Pydantic schemas for UX
+│   ├── design_art_models.py← ✅ Pydantic schemas for Design
+│   ├── tech_models.py      ← ✅ Pydantic schemas for Tech  
+│   └── strategy_models.py  ← ✅ Pydantic schemas for Strategy
+└── synthesis/
+    └── synthesis_models.py ← ✅ Pydantic schemas for Synthesis
+```
+
+---
+
+### 🎨 **FRONTEND Structure Analysis**
+
+**Current Structure:**
+```
+frontend/
+├── src/
+│   ├── index.tsx            ← App entrypoint (placeholder)
+│   ├── components/          ← 🔥 Reusable components here
+│   ├── modules/             ← 🔥 Skill modules here  
+│   ├── pages/               ← Page-level components
+│   ├── services/            ← 🔥 API services here
+│   ├── state/               ← State management
+│   ├── types/               ← TypeScript type definitions
+│   └── styles/              ← Global styles
+├── package.json             ← Vite + React
+└── README.md
+```
+
+**🚀 WHERE MACRO-SKILLS GO:**
+
+```
+frontend/src/modules/
+├── auth/
+│   └── login/               ← ✅ Existing
+├── dashboard/               ← ✅ Existing  
+├── pipeline/                ← ✅ Existing
+├── reports/                 ← ✅ Existing
+├── macro_skills/            ← 🔥 ADD THIS FOLDER
+│   ├── ux_skill/           ← ✅ UX analysis UI
+│   │   ├── UxAnalysisComponent.tsx
+│   │   └── index.tsx
+│   ├── design_art_skill/   ← ✅ Design analysis UI
+│   │   ├── DesignArtComponent.tsx
+│   │   └── index.tsx
+│   ├── tech_systems_skill/← ✅ Tech analysis UI
+│   │   ├── TechComponent.tsx
+│   │   └── index.tsx
+│   └── strategy_market_skill/← ✅ Strategy analysis UI
+│       ├── StrategyComponent.tsx
+│       └── index.tsx
+└── synthesis/              ← 🔥 ADD THIS FOLDER
+    └── synthesis_skill/   ← ✅ Synthesis UI
+        ├── SynthesisComponent.tsx
+        └── index.tsx
+
+frontend/src/components/
+├── common/                  ← 🔥 ADD shared components
+│   ├── AnalysisCard.tsx    ← ✅ Generic skill card
+│   ├── LoadingSpinner.tsx  ← ✅ Loading states
+│   └── ErrorBoundary.tsx   ← ✅ Error handling
+└── charts/                  ← 🔥 ADD visualization components
+    ├── BarChart.tsx        ← ✅ Chart components
+    └── PieChart.tsx
+
+frontend/src/services/
+├── api/                     ← 🔥 ADD API services  
+│   ├── uxApi.ts           ← ✅ UX API calls
+│   ├── designApi.ts       ← ✅ Design API calls
+│   ├── techApi.ts         ← ✅ Tech API calls
+│   ├── strategyApi.ts     ← ✅ Strategy API calls
+│   └── synthesisApi.ts    ← ✅ Synthesis API calls
+└── types/                   ← 🔥 ADD TypeScript types
+    ├── uxTypes.ts         ← ✅ UX interfaces
+    ├── designTypes.ts     ← ✅ Design interfaces  
+    ├── techTypes.ts       ← ✅ Tech interfaces
+    ├── strategyTypes.ts   ← ✅ Strategy interfaces
+    └── synthesisTypes.ts  ← ✅ Synthesis interfaces
+```
+
+---
+
+### 🎯 **MAPPING: OpenSpec → Implementation**
+
+| OpenSpec Contract | Backend Implementation | Frontend Implementation |
+|------------------|----------------------|------------------------|
+| `ux_skill.yaml` | `/app/api/macro_skills/ux_skill.py` | `/src/modules/macro_skills/ux_skill/` |
+| `design_art_skill.yaml` | `/app/api/macro_skills/design_art_skill.py` | `/src/modules/macro_skills/design_art_skill/` |
+| `tech_systems_skill.yaml` | `/app/api/macro_skills/tech_systems_skill.py` | `/src/modules/macro_skills/tech_systems_skill/` |
+| `strategy_market_skill.yaml` | `/app/api/macro_skills/strategy_market_skill.py` | `/src/modules/macro_skills/strategy_market_skill/` |
+| `synthesis_skill.yaml` | `/app/api/synthesis/synthesis_skill.py` | `/src/modules/synthesis/synthesis_skill/` |
+
+---
+
+### ✅ **VALIDATION CHECKLIST**
+
+**Backend ✅:**
+- [x] FastAPI structure correcto
+- [x] API/routes.py listo para incluir routers
+- [x] Services/ listo para lógica de negocio
+- [x] Models/ listo para Pydantic schemas
+- [x] Requirements.txt incluye FastAPI
+
+**Frontend ✅:**  
+- [x] Vite + React configurado
+- [x] Modules/ structure existent
+- [x] Services/ listo para API calls
+- [x] Components/ listo para UI components
+- [x] Types/ listo para TypeScript interfaces
+
+**🚀 LISTO PARA IMPLEMENTACIÓN!**
+
+---
+
+### 4. After implementation:
+   - Rerun validation: `openspec validate --all`
+   - Update OpenSpec docs only if the contract itself changes

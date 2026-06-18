@@ -1,0 +1,65 @@
+schema: spec-driven
+
+# ============================================================
+# Artifact: specs_index.yaml
+# Domain: Master Index of All Specifications
+# Status: draft
+# ============================================================
+
+artifact:
+  id: specs_index
+  name: Master Specifications Index
+  version: "1.0.0"
+  author: GetSmart Team
+  created_at: "2026-06-18"
+  status: draft
+  description: |
+    Master index of all OpenSpec specifications in this repository.
+    This index serves as the entry point for OpenSpec validation discovery.
+
+# ============================================================
+# 1. SPECIFICATIONS INDEX
+# ============================================================
+specs_index:
+  macro_skills:
+    - spec_file: "macro_skills/design_art_skill.yaml"
+      description: "Design and Art Macro-Skill Analysis"
+      capability: "macro-skills"
+    - spec_file: "macro_skills/strategy_market_skill.yaml"
+      description: "Strategy and Market Macro-Skill Analysis"
+      capability: "macro-skills"
+    - spec_file: "macro_skills/tech_systems_skill.yaml"
+      description: "Technology and Systems Macro-Skill Analysis"
+      capability: "macro-skills"
+    - spec_file: "macro_skills/ux_skill.yaml"
+      description: "User Experience Macro-Skill Analysis"
+      capability: "macro-skills"
+  
+  scraper:
+    - spec_file: "scraper/pre_scrap_contract.yaml"
+      description: "Pre-Scrap Phase 0 Contract"
+      capability: "data-ingestion"
+    - spec_file: "scraper/scraper_contract.yaml"
+      description: "Scraper Phase 1 Contract"
+      capability: "data-ingestion"
+    - spec_file: "scraper/data_crud_contract.yaml"
+      description: "Data CRUD Contract"
+      capability: "data-management"
+    - spec_file: "scraper/master_json_schema.yaml"
+      description: "Master JSON Schema Definition"
+      capability: "data-schema"
+  
+  synthesis:
+    - spec_file: "synthesis/synthesis_skill.yaml"
+      description: "Synthesis Phase 4 Contract"
+      capability: "synthesis"
+  
+  ui_and_login:
+    - spec_file: "ui_and_login/ui_login_contract.yaml"
+      description: "UI and Login Contract"
+      capability: "user-interface"
+  
+  schemas:
+    - spec_file: "schemas/final_report_schema.json"
+      description: "Final Report JSON Schema"
+      capability: "output-schema"

@@ -1,0 +1,7 @@
+schema: spec-driven
+
+# ============================================================
+# Root OpenSpec Configuration Entry Point
+# ============================================================
+root_specs:
+  - "specs/spec.yaml"
