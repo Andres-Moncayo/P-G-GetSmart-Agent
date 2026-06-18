@@ -1,0 +1,360 @@
+{
+  "$id": "https://getsmart.dev/schemas/v1/final-report",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GetSmart Final Report Schema",
+  "description": "Final intelligence report JSON schema used for JSON/RAG output.",
+  "type": "object",
+  "required": [
+    "metadata",
+    "executive_summary",
+    "thematic_analysis",
+    "cross_cutting_insights",
+    "strategic_recommendations",
+    "risk_assessment",
+    "appendices",
+    "confidence"
+  ],
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "required": [
+        "report_id",
+        "game_id",
+        "game_name",
+        "generated_at",
+        "pipeline_version",
+        "synthesis_model",
+        "input_skills",
+        "output_formats",
+        "report_classification"
+      ],
+      "properties": {
+        "report_id": { "type": "string", "format": "uuid" },
+        "game_id": { "type": "string", "format": "uuid" },
+        "game_name": { "type": "string" },
+        "generated_at": { "type": "string", "format": "date-time" },
+        "pipeline_version": { "type": "string", "const": "3.0.0" },
+        "synthesis_model": { "type": "string", "const": "gemini-2.5-pro" },
+        "input_skills": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["design_art", "user_experience", "technology_systems", "strategy_market"]
+          }
+        },
+        "input_confidence_range": {
+          "type": "object",
+          "properties": {
+            "min": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "max": { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+          }
+        },
+        "output_formats": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["json", "markdown", "pdf_html"]
+          }
+        },
+        "report_classification": {
+          "type": "string",
+          "enum": ["comprehensive", "partial", "low_confidence", "error"]
+        }
+      }
+    },
+    "executive_summary": {
+      "type": "object",
+      "required": [
+        "game_identity",
+        "market_position",
+        "key_insights",
+        "critical_risks",
+        "recommended_actions",
+        "overall_confidence"
+      ],
+      "properties": {
+        "game_identity": { "type": "string" },
+        "market_position": { "type": "string" },
+        "key_insights": { "type": "array", "items": { "type": "string" } },
+        "critical_risks": { "type": "array", "items": { "type": "string" } },
+        "recommended_actions": { "type": "array", "items": { "type": "string" } },
+        "overall_confidence": { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+      }
+    },
+    "thematic_analysis": {
+      "type": "object",
+      "required": [
+        "gameplay",
+        "level_design",
+        "narrative",
+        "art_direction",
+        "sound_design",
+        "ui_ux",
+        "accessibility",
+        "localization",
+        "technology_performance",
+        "multiplayer_social",
+        "platforms_distribution",
+        "audience",
+        "business_model",
+        "retention_live_ops",
+        "production_business",
+        "marketing",
+        "cultural_impact"
+      ],
+      "properties": {
+        "gameplay": { "$ref": "#/definitions/category" },
+        "level_design": { "$ref": "#/definitions/category" },
+        "narrative": { "$ref": "#/definitions/category" },
+        "art_direction": { "$ref": "#/definitions/category" },
+        "sound_design": { "$ref": "#/definitions/category" },
+        "ui_ux": { "$ref": "#/definitions/category" },
+        "accessibility": { "$ref": "#/definitions/category" },
+        "localization": { "$ref": "#/definitions/category" },
+        "technology_performance": { "$ref": "#/definitions/category" },
+        "multiplayer_social": { "$ref": "#/definitions/category" },
+        "platforms_distribution": { "$ref": "#/definitions/category" },
+        "audience": { "$ref": "#/definitions/category" },
+        "business_model": { "$ref": "#/definitions/category" },
+        "retention_live_ops": { "$ref": "#/definitions/category" },
+        "production_business": { "$ref": "#/definitions/category" },
+        "marketing": { "$ref": "#/definitions/category" },
+        "cultural_impact": { "$ref": "#/definitions/category" }
+      }
+    },
+    "cross_cutting_insights": {
+      "type": "object",
+      "required": ["design_technology_synergy", "player_experience_arc", "commercial_viability", "competitive_moat", "development_health"],
+      "properties": {
+        "design_technology_synergy": { "$ref": "#/definitions/insight" },
+        "player_experience_arc": { "$ref": "#/definitions/insight" },
+        "commercial_viability": { "$ref": "#/definitions/insight" },
+        "competitive_moat": { "$ref": "#/definitions/insight" },
+        "development_health": { "$ref": "#/definitions/insight" }
+      }
+    },
+    "strategic_recommendations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "description", "rationale", "supporting_categories", "impact", "effort", "time_horizon", "confidence", "risk_if_ignored"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "rationale": { "type": "string" },
+          "supporting_categories": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "gameplay",
+                "level_design",
+                "narrative",
+                "art_direction",
+                "sound_design",
+                "ui_ux",
+                "accessibility",
+                "localization",
+                "technology_performance",
+                "multiplayer_social",
+                "platforms_distribution",
+                "audience",
+                "business_model",
+                "retention_live_ops",
+                "production_business",
+                "marketing",
+                "cultural_impact"
+              ]
+            }
+          },
+          "impact": { "type": "string", "enum": ["low", "medium", "high", "transformative"] },
+          "effort": { "type": "string", "enum": ["low", "medium", "high"] },
+          "time_horizon": { "type": "string" },
+          "confidence": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+          "risk_if_ignored": { "type": "string" }
+        }
+      }
+    },
+    "risk_assessment": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "risk_statement", "categories_affected", "likelihood", "impact", "mitigation", "owner", "timeline"],
+        "properties": {
+          "id": { "type": "string" },
+          "risk_statement": { "type": "string" },
+          "categories_affected": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "gameplay",
+                "level_design",
+                "narrative",
+                "art_direction",
+                "sound_design",
+                "ui_ux",
+                "accessibility",
+                "localization",
+                "technology_performance",
+                "multiplayer_social",
+                "platforms_distribution",
+                "audience",
+                "business_model",
+                "retention_live_ops",
+                "production_business",
+                "marketing",
+                "cultural_impact"
+              ]
+            }
+          },
+          "likelihood": { "type": "string", "enum": ["low", "medium", "high"] },
+          "impact": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+          "mitigation": { "type": "string" },
+          "owner": { "type": "string", "enum": ["business", "technical", "creative", "marketing"] },
+          "timeline": { "type": "string" }
+        }
+      }
+    },
+    "appendices": {
+      "type": "object",
+      "required": ["source_index", "confidence_breakdown", "conflict_log", "data_gaps", "methodology_notes"],
+      "properties": {
+        "source_index": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["url", "platform", "first_cited_by", "citation_count"],
+            "properties": {
+              "url": { "type": "string", "format": "uri" },
+              "platform": { "type": "string" },
+              "first_cited_by": { "type": "string" },
+              "citation_count": { "type": "integer" }
+            }
+          }
+        },
+        "confidence_breakdown": {
+          "type": "object",
+          "properties": {
+            "per_category": { "type": "object" },
+            "per_skill": { "type": "object" },
+            "adjustment_rationale": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "conflict_log": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["conflict_id", "topic", "skills_in_conflict", "claim_a", "claim_b", "resolution", "rationale", "synthesized_narrative"],
+            "properties": {
+              "conflict_id": { "type": "string" },
+              "topic": { "type": "string" },
+              "skills_in_conflict": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["design_art", "user_experience", "technology_systems", "strategy_market"]
+                }
+              },
+              "claim_a": { "type": "string" },
+              "claim_b": { "type": "string" },
+              "resolution": { "type": "string", "enum": ["source_authority", "confidence_weighting", "recency", "present_both"] },
+              "rationale": { "type": "string" },
+              "synthesized_narrative": { "type": "string" }
+            }
+          }
+        },
+        "data_gaps": { "type": "array", "items": { "type": "string" } },
+        "methodology_notes": { "type": "string" }
+      }
+    },
+    "confidence": {
+      "type": "object",
+      "required": ["overall_score", "category_scores", "skill_contribution_weights", "data_quality_notes"],
+      "properties": {
+        "overall_score": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "category_scores": {
+          "type": "object",
+          "properties": {
+            "gameplay": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "level_design": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "narrative": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "art_direction": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "sound_design": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "ui_ux": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "accessibility": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "localization": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "technology_performance": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "multiplayer_social": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "platforms_distribution": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "audience": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "business_model": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "retention_live_ops": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "production_business": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "marketing": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "cultural_impact": { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+          }
+        },
+        "skill_contribution_weights": {
+          "type": "object",
+          "properties": {
+            "design_art": { "type": "number" },
+            "user_experience": { "type": "number" },
+            "technology_systems": { "type": "number" },
+            "strategy_market": { "type": "number" }
+          }
+        },
+        "data_quality_notes": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  },
+  "definitions": {
+    "category": {
+      "type": "object",
+      "required": ["category_id", "category_name", "overview", "key_findings", "supporting_evidence", "confidence", "cross_skill_notes"],
+      "properties": {
+        "category_id": { "type": "string" },
+        "category_name": { "type": "string" },
+        "overview": { "type": "string" },
+        "key_findings": { "type": "array", "items": { "type": "string" } },
+        "supporting_evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["source", "claim", "confidence", "urls"],
+            "properties": {
+              "source": {
+                "type": "string",
+                "enum": ["design_art", "user_experience", "technology_systems", "strategy_market"]
+              },
+              "claim": { "type": "string" },
+              "confidence": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+              "urls": { "type": "array", "items": { "type": "string", "format": "uri" } }
+            }
+          }
+        },
+        "confidence": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "cross_skill_notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "insight": {
+      "type": "object",
+      "required": ["insight_id", "title", "narrative", "contributing_skills", "confidence"],
+      "properties": {
+        "insight_id": { "type": "string" },
+        "title": { "type": "string" },
+        "narrative": { "type": "string" },
+        "contributing_skills": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["design_art", "user_experience", "technology_systems", "strategy_market"]
+          }
+        },
+        "supporting_data": { "type": "object" },
+        "confidence": { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+      }
+    }
+  }
+}

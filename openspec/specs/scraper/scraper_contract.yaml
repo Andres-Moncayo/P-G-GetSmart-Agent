@@ -1,0 +1,1023 @@
+schema: spec-driven
+
+# ============================================================
+# Artifact: scraper_contract.yaml
+# Domain: Ingestion (Phase 1)
+# Status: draft
+# ============================================================
+
+artifact:
+  id: scraper_contract
+  name: Scraper & Ingestion Contract
+  version: "1.0.0"
+  author: GetSmart Team
+  created_at: "2026-06-17"
+  status: draft
+  description: |
+    Defines the programmatic ingestion pipeline that extracts structured and
+    semantic data for a confirmed game. Uses 4 parallel Celery workers — one
+    per Macro-Skill — each querying direct APIs (IGDB, RAWG, Steam, SteamSpy)
+    and Tavily with domain-specific queries. Outputs 4 Mini-Context JSONs
+    that are available immediately and later consolidated into Master-JSON.
+
+# ============================================================
+# 1. FLOW DIAGRAM (Mermaid)
+# ============================================================
+flow:
+  mermaid: |
+    flowchart TD
+      A[confirmed_game input] --> B[Fetch Hard Data APIs]
+      B --> C[game_metadata.json]
+      C --> D{Dispatch 4 Celery Workers}
+      D --> E[Worker 1: Design & Art]
+      D --> F[Worker 2: User Experience]
+      D --> G[Worker 3: Technology & Systems]
+      D --> H[Worker 4: Strategy & Market]
+      E --> I[context_design_art.json]
+      F --> J[context_user_experience.json]
+      G --> K[context_technology_systems.json]
+      H --> L[context_strategy_market.json]
+      I --> M[Consolidate Master-JSON]
+      J --> M
+      K --> M
+      L --> M
+      M --> N[master_context.json]
+
+# ============================================================
+# 2. INPUT CONTRACT
+# ============================================================
+input:
+  source: "pre_scrap_contract.yaml / Phase 0"
+  schema: "confirmed_game"
+
+  fields:
+    game_id:
+      type: string
+      format: uuid
+      description: "Internal game UUID in GetSmart"
+      required: true
+
+    name:
+      type: string
+      description: "Exact confirmed game title"
+      required: true
+
+    release_year:
+      type: integer
+      description: "Confirmed release year"
+      required: true
+
+    igdb_id:
+      type: integer
+      description: "IGDB API game ID"
+      required: true
+
+    rawg_id:
+      type: integer
+      description: "RAWG API game ID"
+      required: true
+
+    steam_app_id:
+      type: integer
+      description: "Steam App ID if available"
+      required: false
+      default: null
+
+    aliases:
+      type: array
+      items:
+        type: string
+      description: "Alternative game names for search queries"
+      required: false
+      default: []
+
+# ============================================================
+# 3. WORKERS CONFIGURATION
+# ============================================================
+workers:
+  worker_1_design_art:
+    macro_skill: "Design and Art"
+    worker_id: "scraper_design_art"
+    description: |
+      Extracts gameplay, level design, narrative, art direction, and sound design
+      data. Combines hard data from APIs with semantic searches specialized in
+      design and art domains.
+
+    hard_data_sources:
+      - name: "IGDB API"
+        endpoint: "https://api.igdb.com/v4/games"
+        method: "POST"
+        auth_type: "OAuth2 (Twitch)"
+        timeout_ms: 5000
+        retry_policy:
+          max_retries: 3
+          backoff: "exponential"
+        fields:
+          - genres
+          - themes
+          - game_modes
+          - player_perspectives
+          - game_engines
+          - franchises
+          - collections
+          - storyline
+          - summary
+          - cover_url
+          - screenshots
+          - videos
+          - artworks
+
+      - name: "RAWG API"
+        endpoint: "https://api.rawg.io/api/games/{rawg_id}"
+        method: "GET"
+        auth_type: "API Key"
+        timeout_ms: 5000
+        retry_policy:
+          max_retries: 3
+          backoff: "exponential"
+        fields:
+          - description_raw
+          - metacritic
+          - esrb_rating
+          - added_by_status
+          - ratings
+
+      - name: "Steam Web API"
+        endpoint: "https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/"
+        method: "GET"
+        auth_type: "API Key"
+        timeout_ms: 5000
+        retry_policy:
+          max_retries: 2
+          backoff: "linear"
+        fields:
+          - achievements_schema
+          - achievement_descriptions
+          - achievement_icons
+
+    tavily_queries:
+      base_template: '{game_name} ({release_year})'
+      max_results_per_query: 5
+      search_depth: "advanced"
+      include_raw_content: true
+
+      categories:
+        - name: "gameplay_mechanics"
+          queries:
+            - '{game_name} gameplay mechanics analysis deep dive'
+            - '{game_name} core gameplay loop design'
+            - '{game_name} combat system mechanics review'
+            - '{game_name} progression system design'
+
+        - name: "level_design"
+          queries:
+            - '{game_name} level design analysis'
+            - '{game_name} world design open world layout'
+            - '{game_name} level pacing design'
+            - '{game_name} environmental storytelling'
+
+        - name: "narrative"
+          queries:
+            - '{game_name} story narrative analysis'
+            - '{game_name} plot writing quality'
+            - '{game_name} character development story'
+            - '{game_name} lore worldbuilding depth'
+
+        - name: "art_direction"
+          queries:
+            - '{game_name} art direction visual style analysis'
+            - '{game_name} graphics art style review'
+            - '{game_name} visual identity design'
+            - '{game_name} concept art direction'
+
+        - name: "sound_design"
+          queries:
+            - '{game_name} soundtrack music analysis'
+            - '{game_name} sound design audio review'
+            - '{game_name} voice acting quality'
+            - '{game_name} audio atmosphere immersion'
+
+      platforms:
+        - name: "reddit"
+          subreddits:
+            - "r/gamedev"
+            - "r/games"
+            - "r/truegaming"
+            - "r/{game_name_normalized}"
+        - name: "youtube"
+          query_suffix: "site:youtube.com (review OR analysis OR critique)"
+        - name: "blogs"
+          query_suffix: "(Kotaku OR Polygon OR IGN OR GameSpot OR Eurogamer)"
+        - name: "press"
+          query_suffix: "(review OR analysis OR critique OR deep dive)"
+
+    output:
+      file: "context_design_art.json"
+      schema: "mini_context_design_art"
+
+  worker_2_user_experience:
+    macro_skill: "User Experience"
+    worker_id: "scraper_user_experience"
+    description: |
+      Extracts UI/UX, accessibility, and localization data. Focuses on player
+      experience from interface to inclusion of accessibility options.
+
+    hard_data_sources:
+      - name: "IGDB API"
+        endpoint: "https://api.igdb.com/v4/games"
+        method: "POST"
+        auth_type: "OAuth2 (Twitch)"
+        timeout_ms: 5000
+        retry_policy:
+          max_retries: 3
+          backoff: "exponential"
+        fields:
+          - platforms
+          - languages
+          - language_supports
+
+      - name: "Steam Storefront API"
+        endpoint: "https://store.steampowered.com/api/appdetails"
+        method: "GET"
+        auth_type: "None"
+        timeout_ms: 5000
+        retry_policy:
+          max_retries: 2
+          backoff: "linear"
+        fields:
+          - supported_languages
+          - system_requirements_minimum
+          - system_requirements_recommended
+          - controller_support
+          - full_controller_support
+          - steam_cloud
+          - steam_achievements
+
+      - name: "Steam Reviews API"
+        endpoint: "https://store.steampowered.com/appreviews/{steam_app_id}"
+        method: "GET"
+        auth_type: "None"
+        timeout_ms: 5000
+        retry_policy:
+          max_retries: 2
+          backoff: "linear"
+        fields:
+          - review_text
+          - voted_up
+          - playtime_at_review
+          - timestamp_created
+          - language
+
+    tavily_queries:
+      base_template: '{game_name} ({release_year})'
+      max_results_per_query: 5
+      search_depth: "advanced"
+      include_raw_content: true
+
+      categories:
+        - name: "ui_ux"
+          queries:
+            - '{game_name} UI UX design review'
+            - '{game_name} user interface usability'
+            - '{game_name} HUD design analysis'
+            - '{game_name} menu navigation UX'
+
+        - name: "accessibility"
+          queries:
+            - '{game_name} accessibility options features'
+            - '{game_name} disability support review'
+            - '{game_name} colorblind mode subtitles'
+            - '{game_name} accessibility rating'
+
+        - name: "localization"
+          queries:
+            - '{game_name} localization quality translation'
+            - '{game_name} language support review'
+            - '{game_name} regional pricing availability'
+            - '{game_name} cultural adaptation localization'
+
+      platforms:
+        - name: "reddit"
+          subreddits:
+            - "r/gamedev"
+            - "r/games"
+            - "r/pcgaming"
+        - name: "steam_reviews"
+          query_suffix: "site:store.steampowered.com/appreviews"
+        - name: "stackoverflow"
+          query_suffix: "site:stackoverflow.com (bug OR issue OR problem)"
+        - name: "forums"
+          query_suffix: "(forum OR community) (bug report OR feedback)"
+
+    output:
+      file: "context_user_experience.json"
+      schema: "mini_context_user_experience"
+
+  worker_3_technology_systems:
+    macro_skill: "Technology and Systems"
+    worker_id: "scraper_technology_systems"
+    description: |
+      Extracts technology/performance, multiplayer/social, and platforms/distribution
+      data. Focuses on game architecture, engines used, performance, and multiplayer
+      features.
+
+    hard_data_sources:
+      - name: "IGDB API"
+        endpoint: "https://api.igdb.com/v4/games"
+        method: "POST"
+        auth_type: "OAuth2 (Twitch)"
+        timeout_ms: 5000
+        retry_policy:
+          max_retries: 3
+          backoff: "exponential"
+        fields:
+          - game_engines
+          - platforms
+          - multiplayer_modes
+          - online_coop
+          - offline_coop
+          - lan_coop
+          - split_screen
+          - cross_play
+          - platform_details
+
+      - name: "RAWG API"
+        endpoint: "https://api.rawg.io/api/games/{rawg_id}"
+        method: "GET"
+        auth_type: "API Key"
+        timeout_ms: 5000
+        retry_policy:
+          max_retries: 3
+          backoff: "exponential"
+        fields:
+          - platforms
+          - parent_platforms
+          - requirements_en
+          - requirements_ru
+
+      - name: "Steam Storefront API"
+        endpoint: "https://store.steampowered.com/api/appdetails"
+        method: "GET"
+        auth_type: "None"
+        timeout_ms: 5000
+        retry_policy:
+          max_retries: 2
+          backoff: "linear"
+        fields:
+          - pc_requirements
+          - mac_requirements
+          - linux_requirements
+          - categories
+          - genres
+          - developers
+          - publishers
+
+      - name: "Steam Web API"
+        endpoint: "https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1"
+        method: "GET"
+        auth_type: "API Key"
+        timeout_ms: 5000
+        retry_policy:
+          max_retries: 2
+          backoff: "linear"
+        fields:
+          - current_player_count
+
+    tavily_queries:
+      base_template: '{game_name} ({release_year})'
+      max_results_per_query: 5
+      search_depth: "advanced"
+      include_raw_content: true
+
+      categories:
+        - name: "technology_performance"
+          queries:
+            - '{game_name} game engine technology analysis'
+            - '{game_name} performance optimization review'
+            - '{game_name} technical architecture breakdown'
+            - '{game_name} graphics engine rendering tech'
+
+        - name: "multiplayer_social"
+          queries:
+            - '{game_name} multiplayer technical implementation'
+            - '{game_name} online infrastructure netcode'
+            - '{game_name} coop multiplayer technical review'
+            - '{game_name} server architecture backend'
+
+        - name: "platforms_distribution"
+          queries:
+            - '{game_name} platform requirements performance'
+            - '{game_name} console port technical analysis'
+            - '{game_name} cross platform compatibility'
+            - '{game_name} distribution platforms availability'
+
+      platforms:
+        - name: "github"
+          query_suffix: "site:github.com (repo OR source OR mod OR tool)"
+        - name: "stackoverflow"
+          query_suffix: "site:stackoverflow.com (technical OR implementation OR architecture)"
+        - name: "reddit"
+          subreddits:
+            - "r/gamedev"
+            - "r/pcgaming"
+            - "r/tech"
+        - name: "hackernews"
+          query_suffix: "site:news.ycombinator.com (technical OR architecture OR performance)"
+        - name: "dev_blogs"
+          query_suffix: "(dev blog OR postmortem OR technical blog)"
+
+    output:
+      file: "context_technology_systems.json"
+      schema: "mini_context_technology_systems"
+
+  worker_4_strategy_market:
+    macro_skill: "Strategy and Market"
+    worker_id: "scraper_strategy_market"
+    description: |
+      Extracts audience, business model, retention/live ops, production/business,
+      marketing, and cultural impact data. Focuses on market analysis and commercial
+      strategy of the game.
+
+    hard_data_sources:
+      - name: "IGDB API"
+        endpoint: "https://api.igdb.com/v4/games"
+        method: "POST"
+        auth_type: "OAuth2 (Twitch)"
+        timeout_ms: 5000
+        retry_policy:
+          max_retries: 3
+          backoff: "exponential"
+        fields:
+          - involved_companies
+          - developers
+          - publishers
+          - franchises
+          - collections
+          - hypes
+          - follows
+          - total_rating
+          - total_rating_count
+
+      - name: "RAWG API"
+        endpoint: "https://api.rawg.io/api/games/{rawg_id}"
+        method: "GET"
+        auth_type: "API Key"
+        timeout_ms: 5000
+        retry_policy:
+          max_retries: 3
+          backoff: "exponential"
+        fields:
+          - ratings
+          - rating_top
+          - ratings_count
+          - reviews_text_count
+          - added
+          - added_by_status
+          - suggestions_count
+
+      - name: "Steam Storefront API"
+        endpoint: "https://store.steampowered.com/api/appdetails"
+        method: "GET"
+        auth_type: "None"
+        timeout_ms: 5000
+        retry_policy:
+          max_retries: 2
+          backoff: "linear"
+        fields:
+          - price_overview
+          - is_free
+          - dlc
+          - packages
+          - package_groups
+          - recommendations
+          - release_date
+          - coming_soon
+
+      - name: "Steam Web API"
+        endpoint: "https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1"
+        method: "GET"
+        auth_type: "API Key"
+        timeout_ms: 5000
+        retry_policy:
+          max_retries: 2
+          backoff: "linear"
+        fields:
+          - current_player_count
+          - peak_player_count
+
+      - name: "SteamSpy API"
+        endpoint: "https://steamspy.com/api.php"
+        method: "GET"
+        auth_type: "None"
+        timeout_ms: 5000
+        retry_policy:
+          max_retries: 3
+          backoff: "exponential"
+        fields:
+          - owners_range
+          - average_playtime
+          - median_playtime
+          - ccu
+          - tags
+          - positive_reviews
+          - negative_reviews
+          - price
+          - discount
+
+    tavily_queries:
+      base_template: '{game_name} ({release_year})'
+      max_results_per_query: 5
+      search_depth: "advanced"
+      include_raw_content: true
+
+      categories:
+        - name: "audience"
+          queries:
+            - '{game_name} target audience demographics'
+            - '{game_name} player base community analysis'
+            - '{game_name} fan engagement social media'
+            - '{game_name} player retention engagement'
+
+        - name: "business_model"
+          queries:
+            - '{game_name} monetization strategy revenue'
+            - '{game_name} business model DLC microtransactions'
+            - '{game_name} pricing strategy analysis'
+            - '{game_name} free to play premium model'
+
+        - name: "retention_live_ops"
+          queries:
+            - '{game_name} player retention metrics'
+            - '{game_name} live service updates content'
+            - '{game_name} seasonal events engagement'
+            - '{game_name} long term player loyalty'
+
+        - name: "production_business"
+          queries:
+            - '{game_name} development budget production cost'
+            - '{game_name} studio behind development team'
+            - '{game_name} publisher deal business'
+            - '{game_name} development timeline crunch'
+
+        - name: "marketing"
+          queries:
+            - '{game_name} marketing campaign strategy'
+            - '{game_name} launch marketing spend'
+            - '{game_name} influencer marketing promotion'
+            - '{game_name} social media marketing reach'
+
+        - name: "cultural_impact"
+          queries:
+            - '{game_name} cultural impact influence'
+            - '{game_name} GOTY awards recognition'
+            - '{game_name} industry influence legacy'
+            - '{game_name} community cultural phenomenon'
+
+      platforms:
+        - name: "reddit"
+          subreddits:
+            - "r/gaming"
+            - "r/games"
+            - "r/gamedev"
+            - "r/business"
+        - name: "hackernews"
+          query_suffix: "site:news.ycombinator.com (business OR market OR industry)"
+        - name: "press"
+          query_suffix: "(VentureBeat OR GamesIndustry.biz OR Polygon OR IGN) (sales OR revenue OR market)"
+        - name: "twitter"
+          query_suffix: "site:twitter.com OR site:x.com (trending OR viral OR community)"
+        - name: "forums"
+          query_suffix: "(forum OR community) (discussion OR opinion OR feedback)"
+
+    output:
+      file: "context_strategy_market.json"
+      schema: "mini_context_strategy_market"
+
+# ============================================================
+# 4. API CONFIGURATION
+# ============================================================
+api_config:
+  igdb:
+    base_url: "https://api.igdb.com/v4"
+    auth_type: "OAuth2 Client Credentials"
+    client_id: "${IGDB_CLIENT_ID}"
+    client_secret: "${IGDB_CLIENT_SECRET}"
+    rate_limit: "4 requests per second"
+    timeout_ms: 5000
+    retry_policy:
+      max_retries: 3
+      backoff: "exponential"
+      initial_delay_ms: 1000
+      max_delay_ms: 30000
+
+  rawg:
+    base_url: "https://api.rawg.io/api"
+    auth_type: "API Key"
+    api_key: "${RAWG_API_KEY}"
+    rate_limit: "20 requests per second"
+    timeout_ms: 5000
+    retry_policy:
+      max_retries: 3
+      backoff: "exponential"
+      initial_delay_ms: 1000
+      max_delay_ms: 30000
+
+  steam_storefront:
+    base_url: "https://store.steampowered.com/api"
+    auth_type: "None"
+    rate_limit: "100 requests per 5 minutes"
+    timeout_ms: 5000
+    retry_policy:
+      max_retries: 2
+      backoff: "linear"
+      initial_delay_ms: 2000
+
+  steam_web:
+    base_url: "https://api.steampowered.com"
+    auth_type: "API Key"
+    api_key: "${STEAM_API_KEY}"
+    rate_limit: "100000 requests per day"
+    timeout_ms: 5000
+    retry_policy:
+      max_retries: 2
+      backoff: "linear"
+      initial_delay_ms: 1000
+
+  steamspy:
+    base_url: "https://steamspy.com/api.php"
+    auth_type: "None"
+    rate_limit: "1 request per second"
+    timeout_ms: 5000
+    retry_policy:
+      max_retries: 3
+      backoff: "exponential"
+      initial_delay_ms: 2000
+      max_delay_ms: 30000
+
+  tavily:
+    base_url: "https://api.tavily.com"
+    auth_type: "API Key"
+    api_key: "${TAVILY_API_KEY}"
+    rate_limit: "1000 requests per month"
+    timeout_ms: 5000
+    retry_policy:
+      max_retries: 2
+      backoff: "exponential"
+      initial_delay_ms: 1000
+      max_delay_ms: 30000
+    search_config:
+      search_depth: "advanced"
+      include_raw_content: true
+      topic: "general"
+      max_results_per_query: 5
+
+# ============================================================
+# 5. OUTPUT SCHEMAS
+# ============================================================
+output_schemas:
+  mini_context_design_art:
+    description: "Structured context for Design and Art Macro-Skill"
+    schema_ref: "master_json_schema.yaml#/definitions/mini_context_design_art"
+
+    structure:
+      metadata:
+        game_id: string (uuid)
+        game_name: string
+        macro_skill: "Design and Art"
+        worker_id: "scraper_design_art"
+        generated_at: string (ISO 8601)
+        data_sources: array<string>
+
+      hard_data:
+        genres: array<string>
+        themes: array<string>
+        game_modes: array<string>
+        player_perspectives: array<string>
+        game_engines: array<string>
+        franchises: array<string>
+        collections: array<string>
+        storyline: string | null
+        summary: string | null
+        cover_url: string (uri) | null
+        screenshots: array<{url: string, width: int, height: int}>
+        videos: array<{url: string, name: string}>
+        artworks: array<{url: string, width: int, height: int}>
+        description_raw: string | null
+        metacritic: int | null
+        esrb_rating: string | null
+        ratings_distribution: object
+        achievements_schema: array<{name: string, description: string, icon: string}>
+
+      semantic_data:
+        gameplay_mechanics:
+          sources: array<{url: string, title: string, snippet: string, platform: string}>
+          summary: string | null
+        level_design:
+          sources: array<{url: string, title: string, snippet: string, platform: string}>
+          summary: string | null
+        narrative:
+          sources: array<{url: string, title: string, snippet: string, platform: string}>
+          summary: string | null
+        art_direction:
+          sources: array<{url: string, title: string, snippet: string, platform: string}>
+          summary: string | null
+        sound_design:
+          sources: array<{url: string, title: string, snippet: string, platform: string}>
+          summary: string | null
+
+      evidence_count: int (>= 0)
+      confidence_score: float (0.0 - 1.0)
+
+  mini_context_user_experience:
+    description: "Structured context for User Experience Macro-Skill"
+    schema_ref: "master_json_schema.yaml#/definitions/mini_context_user_experience"
+
+    structure:
+      metadata:
+        game_id: string (uuid)
+        game_name: string
+        macro_skill: "User Experience"
+        worker_id: "scraper_user_experience"
+        generated_at: string (ISO 8601)
+        data_sources: array<string>
+
+      hard_data:
+        platforms: array<string>
+        languages_supported: array<string>
+        system_requirements:
+          minimum: string | null
+          recommended: string | null
+        controller_support: boolean
+        full_controller_support: boolean
+        steam_cloud: boolean
+        steam_achievements: boolean
+
+      semantic_data:
+        ui_ux:
+          sources: array<{url: string, title: string, snippet: string, platform: string}>
+          summary: string | null
+        accessibility:
+          sources: array<{url: string, title: string, snippet: string, platform: string}>
+          summary: string | null
+        localization:
+          sources: array<{url: string, title: string, snippet: string, platform: string}>
+          summary: string | null
+        steam_reviews_sample:
+          positive_count: int
+          negative_count: int
+          review_score: float | null
+          sample_reviews: array<{review: string, voted_up: bool, playtime_hours: float, language: string}>
+
+      evidence_count: int (>= 0)
+      confidence_score: float (0.0 - 1.0)
+
+  mini_context_technology_systems:
+    description: "Structured context for Technology and Systems Macro-Skill"
+    schema_ref: "master_json_schema.yaml#/definitions/mini_context_technology_systems"
+
+    structure:
+      metadata:
+        game_id: string (uuid)
+        game_name: string
+        macro_skill: "Technology and Systems"
+        worker_id: "scraper_technology_systems"
+        generated_at: string (ISO 8601)
+        data_sources: array<string>
+
+      hard_data:
+        game_engines: array<string>
+        platforms: array<string>
+        multiplayer_modes: array<string>
+        online_coop: boolean
+        offline_coop: boolean
+        lan_coop: boolean
+        split_screen: boolean
+        cross_play: boolean
+        pc_requirements: object | null
+        mac_requirements: object | null
+        linux_requirements: object | null
+        current_player_count: int | null
+
+      semantic_data:
+        technology_performance:
+          sources: array<{url: string, title: string, snippet: string, platform: string}>
+          summary: string | null
+        multiplayer_social:
+          sources: array<{url: string, title: string, snippet: string, platform: string}>
+          summary: string | null
+        platforms_distribution:
+          sources: array<{url: string, title: string, snippet: string, platform: string}>
+          summary: string | null
+
+      evidence_count: int (>= 0)
+      confidence_score: float (0.0 - 1.0)
+
+  mini_context_strategy_market:
+    description: "Structured context for Strategy and Market Macro-Skill"
+    schema_ref: "master_json_schema.yaml#/definitions/mini_context_strategy_market"
+
+    structure:
+      metadata:
+        game_id: string (uuid)
+        game_name: string
+        macro_skill: "Strategy and Market"
+        worker_id: "scraper_strategy_market"
+        generated_at: string (ISO 8601)
+        data_sources: array<string>
+
+      hard_data:
+        involved_companies: array<{name: string, role: string, type: string}>
+        developers: array<string>
+        publishers: array<string>
+        franchises: array<string>
+        total_rating: float | null
+        total_rating_count: int
+        ratings_distribution: object
+        price_overview: object | null
+        is_free: boolean
+        dlc_count: int
+        recommendations: int | null
+        release_date: string | null
+        owners_range: string | null
+        average_playtime: int | null
+        median_playtime: int | null
+        ccu: int | null
+        steamspy_tags: array<string>
+        positive_reviews: int | null
+        negative_reviews: int | null
+        current_player_count: int | null
+
+      semantic_data:
+        audience:
+          sources: array<{url: string, title: string, snippet: string, platform: string}>
+          summary: string | null
+        business_model:
+          sources: array<{url: string, title: string, snippet: string, platform: string}>
+          summary: string | null
+        retention_live_ops:
+          sources: array<{url: string, title: string, snippet: string, platform: string}>
+          summary: string | null
+        production_business:
+          sources: array<{url: string, title: string, snippet: string, platform: string}>
+          summary: string | null
+        marketing:
+          sources: array<{url: string, title: string, snippet: string, platform: string}>
+          summary: string | null
+        cultural_impact:
+          sources: array<{url: string, title: string, snippet: string, platform: string}>
+          summary: string | null
+
+      evidence_count: int (>= 0)
+      confidence_score: float (0.0 - 1.0)
+
+# ============================================================
+# 6. ERROR HANDLING & FALLBACKS
+# ============================================================
+error_handling:
+  worker_failure_policy:
+    description: "If a worker fails, the other 3 continue. Master-JSON is built with successful workers only."
+    behavior: "continue_on_failure"
+    failed_worker_output: "null for that Mini-Context section"
+
+  api_failure_fallbacks:
+    - scenario: "igdb_unavailable"
+      fallback: "Use RAWG as primary source for game metadata"
+      severity: "medium"
+
+    - scenario: "rawg_unavailable"
+      fallback: "Use IGDB as primary source; if both fail, use Steam Storefront only"
+      severity: "medium"
+
+    - scenario: "steam_unavailable"
+      fallback: "Skip Steam-specific data; continue with IGDB/RAWG + Tavily"
+      severity: "low"
+
+    - scenario: "steamspy_unavailable"
+      fallback: "Skip sales estimates; use Steam reviews for popularity proxy"
+      severity: "low"
+
+    - scenario: "tavily_unavailable"
+      fallback: "Use only hard data from APIs; semantic_data sections will be empty"
+      severity: "high"
+
+    - scenario: "tavily_rate_limit"
+      fallback: "Reduce max_results_per_query to 3; increase delay between requests"
+      severity: "medium"
+
+  retry_policy:
+    max_retries: 3
+    backoff: "exponential"
+    initial_delay_ms: 1000
+    max_delay_ms: 30000
+    retryable_status_codes: [429, 500, 502, 503, 504]
+
+# ============================================================
+# 7. CACHING STRATEGY
+# ============================================================
+caching:
+  phase_1_policy:
+    description: "No LLM cache in Phase 1. Only API response cache."
+    llm_cache: false
+
+  api_response_cache:
+    enabled: true
+    ttl_seconds: 3600
+    storage: "Redis"
+    key_format: "scraper:{game_id}:{api_source}:{endpoint_hash}"
+
+    cached_endpoints:
+      - "IGDB game metadata"
+      - "RAWG game metadata"
+      - "Steam Storefront details"
+      - "SteamSpy app details"
+
+    non_cached_endpoints:
+      - "Tavily search results"
+      - "Steam current player count"
+
+# ============================================================
+# 8. RATE LIMITING
+# ============================================================
+rate_limits:
+  tavily:
+    max_requests_per_month: 1000
+    requests_per_worker: 20
+    total_requests_per_game: 80
+    concurrency_limit: 4
+
+  igdb:
+    requests_per_second: 4
+    burst_limit: 10
+
+  rawg:
+    requests_per_second: 20
+    burst_limit: 50
+
+  steam_storefront:
+    requests_per_5_minutes: 100
+    burst_limit: 20
+
+  steamspy:
+    requests_per_second: 1
+    burst_limit: 3
+
+# ============================================================
+# 9. MONITORING & OBSERVABILITY
+# ============================================================
+monitoring:
+  metrics:
+    - name: "scraper_latency_seconds"
+      type: histogram
+      labels: ["worker_id", "game_id"]
+      description: "Total execution time per worker"
+
+    - name: "scraper_api_calls_total"
+      type: counter
+      labels: ["api_source", "status", "game_id"]
+      description: "API calls by source and status"
+
+    - name: "scraper_tavily_results_total"
+      type: counter
+      labels: ["worker_id", "category", "game_id"]
+      description: "Tavily results by worker and category"
+
+    - name: "scraper_errors_total"
+      type: counter
+      labels: ["worker_id", "error_type", "game_id"]
+      description: "Errors by worker and type"
+
+    - name: "scraper_evidence_count"
+      type: gauge
+      labels: ["worker_id", "game_id"]
+      description: "Evidence sources collected"
+
+  logging:
+    level: "INFO"
+    format: "json"
+    fields:
+      - timestamp
+      - level
+      - worker_id
+      - game_id
+      - message
+      - duration_ms
+      - api_source
+      - error_details
+
+# ============================================================
+# 10. SECURITY & DATA PRIVACY
+# ============================================================
+security:
+  api_key_management:
+    storage: "Environment variables only"
+    rotation_policy: "90 days"
+
+  data_retention:
+    raw_tavily_results: "7 days"
+    mini_contexts: "90 days"
+    master_json: "1 year"
+
+  pii_handling:
+    scrub_user_names: true
+    scrub_email_addresses: true
+    scrub_ips: true

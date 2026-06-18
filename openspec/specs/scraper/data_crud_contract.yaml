@@ -1,0 +1,818 @@
+schema: spec-driven
+
+# ============================================================
+# Artifact: data_crud_contract.yaml
+# Domain: Report Data Management
+# Phase: All phases (read across pipeline, write at completion)
+# Status: draft
+# ============================================================
+
+artifact:
+  id: data_crud_contract
+  name: Data CRUD Contract
+  version: "1.0.0"
+  author: GetSmart Team
+  created_at: "2026-06-17"
+  status: draft
+  description: |
+    Defines all CRUD operations for game analysis reports including listing,
+    filtering, sorting, retrieval, update, and deletion. Covers the report grid
+    with sidebar filters, search, and status tracking.
+
+# ============================================================
+# 1. REPORT SCHEMA
+# ============================================================
+report_schema:
+  $id: "https://getsmart.dev/schemas/v1/report"
+  type: object
+  required: ["id", "game", "status", "created_at", "updated_at"]
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: "Unique report identifier"
+
+    game:
+      type: object
+      required: ["id", "name", "release_year"]
+      properties:
+        id:
+          type: string
+          description: "Canonical game ID (IGDB)"
+        name:
+          type: string
+          description: "Game title"
+        slug:
+          type: string
+          description: "URL-friendly slug"
+        release_year:
+          type: integer
+        developer:
+          type: string
+        publisher:
+          type: string
+        genres:
+          type: array
+          items:
+            type: string
+        platforms:
+          type: array
+          items:
+            type: string
+        cover_url:
+          type: ["string", "null"]
+          format: uri
+
+    status:
+      type: string
+      enum: ["queued", "processing", "completed", "failed", "cancelled"]
+      description: "Current pipeline status"
+
+    current_phase:
+      type: ["integer", "null"]
+      minimum: 0
+      maximum: 4
+      description: "Current pipeline phase (null if not started)"
+
+    progress_percent:
+      type: integer
+      minimum: 0
+      maximum: 100
+      default: 0
+
+    outputs:
+      type: object
+      properties:
+        markdown_url:
+          type: ["string", "null"]
+          format: uri
+        pdf_url:
+          type: ["string", "null"]
+          format: uri
+        json_url:
+          type: ["string", "null"]
+          format: uri
+        json_rag_url:
+          type: ["string", "null"]
+          format: uri
+          description: "Vector-optimized JSON for RAG"
+
+    metadata:
+      type: object
+      properties:
+        pipeline_id:
+          type: string
+          format: uuid
+        started_at:
+          type: ["string", "null"]
+          format: date-time
+        completed_at:
+          type: ["string", "null"]
+          format: date-time
+        duration_seconds:
+          type: ["integer", "null"]
+        triggered_by:
+          type: string
+          format: uuid
+          description: "User ID who triggered the pipeline"
+        version:
+          type: string
+          description: "Pipeline version used"
+
+    summary:
+      type: ["object", "null"]
+      description: "Auto-generated summary after completion"
+      properties:
+        word_count:
+          type: integer
+        sections_count:
+          type: integer
+        macro_skills_covered:
+          type: array
+          items:
+            type: string
+            enum: ["design_and_art", "user_experience", "technology_and_systems", "strategy_and_market"]
+        key_findings:
+          type: array
+          items:
+            type: string
+          maxItems: 5
+
+    tags:
+      type: array
+      items:
+        type: string
+      description: "User-defined tags"
+
+    created_at:
+      type: string
+      format: date-time
+
+    updated_at:
+      type: string
+      format: date-time
+
+# ============================================================
+# 2. FILTER SCHEMA
+# ============================================================
+filter_schema:
+  type: object
+  properties:
+    genre:
+      type: array
+      items:
+        type: string
+        enum: ["Action RPG", "Battle Royale", "MOBA", "Open World", "Adventure", "Action", "RPG", "Strategy", "Shooter", "Fighting", "Racing", "Simulation", "Sports", "Puzzle", "Platformer"]
+    developer:
+      type: array
+      items:
+        type: string
+        enum: ["Riot Games", "Epic Games", "FromSoftware", "CD Projekt Red", "Nintendo", "Santa Monica Studio", "Naughty Dog", "Bungie", "Valve", "Blizzard"]
+    platform:
+      type: array
+      items:
+        type: string
+        enum: ["PC", "PlayStation", "Xbox", "Switch", "Mobile"]
+    status:
+      type: array
+      items:
+        type: string
+        enum: ["completed", "processing", "queued", "failed"]
+    year_from:
+      type: integer
+      minimum: 1980
+      maximum: 2030
+    year_to:
+      type: integer
+      minimum: 1980
+      maximum: 2030
+    search:
+      type: string
+      maxLength: 100
+
+  # Facet counts (returned with list)
+  facet_counts:
+    type: object
+    properties:
+      genre:
+        type: object
+        additionalProperties:
+          type: integer
+      developer:
+        type: object
+        additionalProperties:
+          type: integer
+      platform:
+        type: object
+        additionalProperties:
+          type: integer
+      status:
+        type: object
+        additionalProperties:
+          type: integer
+
+# ============================================================
+# 3. SORT OPTIONS
+# ============================================================
+sort_options:
+  - field: "created_at"
+    label: "Most recent"
+    default_direction: "desc"
+  - field: "game.name"
+    label: "Alphabetical"
+    default_direction: "asc"
+  - field: "game.release_year"
+    label: "Release year"
+    default_direction: "desc"
+  - field: "updated_at"
+    label: "Last updated"
+    default_direction: "desc"
+  - field: "progress_percent"
+    label: "Progress"
+    default_direction: "desc"
+
+# ============================================================
+# 4. API ENDPOINTS
+# ============================================================
+endpoints:
+  # ---- List Reports ----
+  - path: GET /api/v1/reports
+    summary: "List game analysis reports with filtering and pagination"
+    tags: ["reports"]
+    security:
+      - cookieAuth: []
+    parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          default: 1
+          minimum: 1
+      - name: page_size
+        in: query
+        schema:
+          type: integer
+          default: 12
+          minimum: 1
+          maximum: 50
+      - name: sort_by
+        in: query
+        schema:
+          type: string
+          enum: ["created_at", "game.name", "game.release_year", "updated_at", "progress_percent"]
+          default: "created_at"
+      - name: sort_dir
+        in: query
+        schema:
+          type: string
+          enum: ["asc", "desc"]
+          default: "desc"
+      - name: genre
+        in: query
+        style: form
+        explode: true
+        schema:
+          type: array
+          items:
+            type: string
+      - name: developer
+        in: query
+        style: form
+        explode: true
+        schema:
+          type: array
+          items:
+            type: string
+      - name: platform
+        in: query
+        style: form
+        explode: true
+        schema:
+          type: array
+          items:
+            type: string
+      - name: status
+        in: query
+        style: form
+        explode: true
+        schema:
+          type: array
+          items:
+            type: string
+      - name: year_from
+        in: query
+        schema:
+          type: integer
+      - name: year_to
+        in: query
+        schema:
+          type: integer
+      - name: search
+        in: query
+        schema:
+          type: string
+          maxLength: 100
+    responses:
+      "200":
+        description: "Paginated list of reports"
+        content:
+          application/json:
+            schema:
+              type: object
+              required: ["items", "pagination", "facets"]
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: "#/report_schema"
+                pagination:
+                  type: object
+                  properties:
+                    page:
+                      type: integer
+                    page_size:
+                      type: integer
+                    total:
+                      type: integer
+                    total_pages:
+                      type: integer
+                    has_next:
+                      type: boolean
+                    has_prev:
+                      type: boolean
+                facets:
+                  $ref: "#/filter_schema/properties/facet_counts"
+      "401":
+        description: "Unauthorized"
+
+  # ---- Get Single Report ----
+  - path: GET /api/v1/reports/{report_id}
+    summary: "Get a single report by ID"
+    tags: ["reports"]
+    security:
+      - cookieAuth: []
+    parameters:
+      - name: report_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      "200":
+        description: "Report details"
+        content:
+          application/json:
+            schema:
+              $ref: "#/report_schema"
+      "404":
+        description: "Report not found"
+
+  # ---- Get Report Content ----
+  - path: GET /api/v1/reports/{report_id}/content
+    summary: "Get report content in specified format"
+    tags: ["reports"]
+    security:
+      - cookieAuth: []
+    parameters:
+      - name: report_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: format
+        in: query
+        required: true
+        schema:
+          type: string
+          enum: ["markdown", "json", "json_rag"]
+    responses:
+      "200":
+        description: "Report content"
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                format:
+                  type: string
+                content:
+                  type: string
+                download_url:
+                  type: string
+                  format: uri
+      "404":
+        description: "Report or format not found"
+
+  # ---- Download Report PDF ----
+  - path: GET /api/v1/reports/{report_id}/download
+    summary: "Download report as PDF"
+    tags: ["reports"]
+    security:
+      - cookieAuth: []
+    parameters:
+      - name: report_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      "200":
+        description: "PDF file"
+        content:
+          application/pdf:
+            schema:
+              type: string
+              format: binary
+      "404":
+        description: "Report not found or PDF not generated"
+
+  # ---- Update Report Tags ----
+  - path: PATCH /api/v1/reports/{report_id}
+    summary: "Update report metadata (tags, notes)"
+    tags: ["reports"]
+    security:
+      - cookieAuth: []
+    parameters:
+      - name: report_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              tags:
+                type: array
+                items:
+                  type: string
+              notes:
+                type: string
+                maxLength: 1000
+    responses:
+      "200":
+        description: "Report updated"
+      "404":
+        description: "Report not found"
+      "403":
+        description: "Cannot modify report not owned by user"
+
+  # ---- Delete Report ----
+  - path: DELETE /api/v1/reports/{report_id}
+    summary: "Delete a report and all associated files"
+    tags: ["reports"]
+    security:
+      - cookieAuth: []
+    parameters:
+      - name: report_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      "204":
+        description: "Report deleted"
+      "404":
+        description: "Report not found"
+      "403":
+        description: "Cannot delete report not owned by user"
+
+  # ---- Get Filter Facets ----
+  - path: GET /api/v1/reports/facets
+    summary: "Get available filter options with counts"
+    tags: ["reports"]
+    security:
+      - cookieAuth: []
+    responses:
+      "200":
+        description: "Filter facets"
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                genre:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      value:
+                        type: string
+                      count:
+                        type: integer
+                      label:
+                        type: string
+                developer:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      value:
+                        type: string
+                      count:
+                        type: integer
+                      label:
+                        type: string
+                platform:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      value:
+                        type: string
+                      count:
+                        type: integer
+                      label:
+                        type: string
+                status:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      value:
+                        type: string
+                      count:
+                        type: integer
+                      label:
+                        type: string
+                year_range:
+                  type: object
+                  properties:
+                    min:
+                      type: integer
+                    max:
+                      type: integer
+
+# ============================================================
+# 5. UI COMPONENT: REPORT GRID
+# ============================================================
+ui_report_grid:
+  layout: "responsive_grid"
+  columns:
+    sm: 1
+    md: 2
+    xl: 3
+  gap: "20px"
+
+  toolbar:
+    layout: "flex_between"
+    counter:
+      template: "Showing {count} reports"
+      color: "text_muted"
+      font_size: "sm"
+    sort_selector:
+      label: "Sort by"
+      label_color: "text_muted"
+      label_size: "xs"
+      dropdown_style: "surface_border"
+      options_source: "#/sort_options"
+
+  card:
+    aspect_ratio: "16/10"
+    border_radius: "16px"  # rounded-2xl
+    background: "surface"
+    border: "border"
+    hover:
+      border: "border_hover"
+      translate_y: "-4px"
+      shadow: "shadow-card"
+      duration: "500ms"
+
+    image_section:
+      overflow: "hidden"
+      border_radius_top: "16px"
+      overlay: "gradient_to_top"
+      overlay_opacity: "60%"
+      hover_zoom: "scale(1.08)"
+      hover_duration: "500ms"
+      hover_easing: "cubic-bezier(0.4,0,0.2,1)"
+
+      status_badge:
+        position: "top_left"
+        margin: "12px"
+        completed:
+          background: "success/15"
+          border: "success/25"
+          text: "success"
+          dot: "success"
+          label: "Completed"
+        processing:
+          background: "warning/15"
+          border: "warning/25"
+          text: "warning"
+          dot: "warning"
+          dot_animation: "pulse_dot"
+          label: "Processing"
+        queued:
+          background: "text_disabled/15"
+          border: "text_disabled/25"
+          text: "text_disabled"
+          label: "Queued"
+        failed:
+          background: "danger/15"
+          border: "danger/25"
+          text: "danger"
+          label: "Failed"
+
+      download_button:
+        position: "top_right"
+        margin: "12px"
+        visible: "on_hover"
+        transition: "300ms"
+        style: "surface/90 backdrop-blur border-border"
+        hover: "accent border-accent"
+        icon: "fa-download"
+        icon_size: "xs"
+
+      progress_bar:
+        visible: "when_processing"
+        position: "bottom"
+        height: "4px"
+        background: "elevated"
+        fill: "gradient_accent_to_secondary"
+        glow: "shadow-accent/40"
+
+    content_section:
+      padding: "16px"
+
+      genre_chip:
+        display: "inline-block"
+        background: "accent/10"
+        border: "accent/20"
+        text: "accent"
+        font_size: "xs"
+        font_weight: "medium"
+        padding: "2px 8px"
+        border_radius: "6px"
+        margin_bottom: "8px"
+
+      title:
+        font_size: "base"
+        font_weight: "semibold"
+        color: "text_primary"
+        truncate: true
+        hover_color: "accent"
+        transition: "colors"
+
+      metadata:
+        template: "{developer} · {year}"
+        color: "text_muted"
+        font_size: "xs"
+        margin_bottom: "12px"
+
+      footer:
+        layout: "flex_between"
+        platforms:
+          display: "icons"
+          color: "text_muted"
+          size: "xs"
+          gap: "6px"
+        timestamp:
+          color: "text_muted"
+          font_size: "xs"
+
+# ============================================================
+# 6. UI COMPONENT: SIDEBAR FILTERS
+# ============================================================
+ui_sidebar:
+  width: "256px"  # w-64
+  position: "sticky"
+  top: "96px"  # below topbar
+  display: "hidden lg:block"
+
+  header:
+    layout: "flex_between"
+    title:
+      text: "Filters"
+      font_size: "sm"
+      font_weight: "semibold"
+      color: "text_primary"
+    clear_button:
+      text: "Clear all"
+      color: "accent"
+      hover: "accent_light"
+      font_size: "xs"
+      visible: "when_filters_active"
+
+  filter_group:
+    margin_bottom: "24px"
+
+    title:
+      text_transform: "uppercase"
+      font_size: "xs"
+      font_weight: "semibold"
+      color: "text_muted"
+      letter_spacing: "wider"
+      margin_bottom: "12px"
+
+    option:
+      layout: "flex"
+      align: "center"
+      gap: "12px"
+      padding: "4px 0"
+      cursor: "pointer"
+      group_hover: true
+
+      checkbox:
+        size: "16px"
+        shape: "rounded"
+        border: "border"
+        background: "elevated"
+        checked:
+          background: "accent"
+          border: "accent"
+        check_icon:
+          color: "white"
+          size: "12px"
+          opacity: "0 -> 1"
+
+      label:
+        font_size: "sm"
+        color: "text_secondary"
+        group_hover_color: "text_primary"
+        transition: "colors"
+
+      count:
+        margin_left: "auto"
+        font_size: "xs"
+        color: "text_muted"
+
+# ============================================================
+# 7. REAL-TIME UPDATES
+# ============================================================
+realtime:
+  transport: "websocket"
+  endpoint: "wss://api.getsmart.dev/v1/ws/reports"
+  auth: "cookie"
+
+  events:
+    - name: "report.status_changed"
+      payload:
+        report_id: "string (uuid)"
+        old_status: "string"
+        new_status: "string"
+        current_phase: "integer | null"
+        progress_percent: "integer"
+
+    - name: "report.completed"
+      payload:
+        report_id: "string (uuid)"
+        game_name: "string"
+        outputs:
+          markdown_url: "string | null"
+          pdf_url: "string | null"
+          json_url: "string | null"
+
+    - name: "report.failed"
+      payload:
+        report_id: "string (uuid)"
+        error_code: "string"
+        error_message: "string"
+        failed_phase: "string"
+
+# ============================================================
+# 8. CACHING STRATEGY
+# ============================================================
+caching:
+  report_list:
+    ttl_seconds: 30
+    invalidation: "on_report_status_change"
+
+  report_detail:
+    ttl_seconds: 60
+    invalidation: "on_report_update"
+
+  facets:
+    ttl_seconds: 300
+    invalidation: "on_new_report"
+
+  content:
+    ttl_seconds: 3600
+    invalidation: "never"
+    etag: true
+
+# ============================================================
+# 9. RATE LIMITS
+# ============================================================
+rate_limits:
+  list_reports:
+    window: "1 minute"
+    max_requests: 30
+    per_user: true
+
+  get_report:
+    window: "1 minute"
+    max_requests: 60
+    per_user: true
+
+  download_pdf:
+    window: "1 hour"
+    max_requests: 20
+    per_user: true

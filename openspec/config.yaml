@@ -1,0 +1,362 @@
+schema: spec-driven
+
+# ============================================================
+# GetSmart v3.0 — OpenSpec Configuration
+# Deterministic Pipeline for Game Intelligence Reports
+# ============================================================
+
+project:
+  name: "GetSmart"
+  version: "3.0.0"
+  description: "Deterministic Parallel Analysis Pipeline for comprehensive game intelligence reports"
+  methodology: "Spec Driven Development (SDD)"
+  spec_format: "OpenSpec"
+  created_at: "2026-06-17"
+  status: "draft"
+
+  objectives:
+    - "Generate structured, professional-grade game intelligence reports"
+    - "Support use cases: Pre-sales, Onboarding, RAG, UX & Creativity"
+    - "Ensure predictability through programmatic control"
+    - "Mitigate overengineering risk within 4-week delivery cycle"
+
+  main_contract: |
+    The system's primary contract is the Master-JSON data schema and the
+    output JSON Schemas of each Macro-Skill. All OpenSpec artifacts must be
+    documented, frozen, and stored in specs/.
+
+project_structure:
+  root_files:
+    - README.md
+    - .gitignore
+    - LICENSE
+  layout:
+    openspec: "openspec/"
+    frontend: "frontend/"
+    backend: "backend/"
+    infra: "infra/"
+    scripts: "scripts/"
+  notes:
+    - "Top-level README and .gitignore live at repo root (outside openspec/)."
+    - "Keep OpenSpec artifacts inside `openspec/`."
+
+# ============================================================
+# Tech Stack
+# ============================================================
+stack:
+  frontend:
+    framework: "React 18+"
+    language: "TypeScript 5.0+"
+    bundler: "Vite 5+"
+    styling: "Tailwind CSS 3.4+"
+    state_management: "Zustand"
+    routing: "React Router 6"
+    icons: "FontAwesome 6"
+    font: "Inter (Google Fonts)"
+
+  backend:
+    framework: "FastAPI 0.110+"
+    language: "Python 3.11+"
+    task_queue: "Celery 5.3+"
+    broker: "Redis 7+"
+    result_backend: "Redis 7+"
+    orm: "SQLAlchemy 2.0+"
+    database: "PostgreSQL 16+"
+
+  ai_models:
+    provider: "Google"
+    models:
+      - name: "gemini-2.5-flash"
+        purpose: "Parallel Macro-Skill processing (Phase 3)"
+        context_window: "2M tokens"
+        temperature: 0.3
+      - name: "gemini-2.5-pro"
+        purpose: "Synthesis and final editing (Phase 4)"
+        context_window: "2M tokens"
+        temperature: 0.2
+      - name: "gemini-gema-4"
+        purpose: "Support tasks and quick chat responses"
+        context_window: "1M tokens"
+        temperature: 0.4
+
+  data_sources:
+    structured:
+      - name: "IGDB API"
+        endpoint: "https://api.igdb.com/v4"
+        auth: "OAuth2 (Twitch)"
+        purpose: "Primary game metadata (Phase 0)"
+      - name: "RAWG API"
+        endpoint: "https://api.rawg.io/api"
+        auth: "API Key"
+        purpose: "Complementary game metadata (Phase 0)"
+      - name: "Steam Storefront API"
+        endpoint: "https://store.steampowered.com/api"
+        auth: "None"
+        purpose: "Prices, reviews, player data (Phase 1)"
+      - name: "Steam Web API"
+        endpoint: "https://api.steampowered.com"
+        auth: "API Key"
+        purpose: "Achievements, player counts (Phase 1)"
+    unstructured:
+      - name: "Tavily"
+        endpoint: "https://api.tavily.com"
+        auth: "API Key"
+        purpose: "Semantic web searches (Phase 1)"
+      - name: "Twitch Helix API"
+        endpoint: "https://api.twitch.tv/helix"
+        auth: "OAuth2"
+        purpose: "Viewership, streamer data (Phase 1)"
+
+  outputs:
+    - format: "Markdown"
+      generator: "Python (markdown library)"
+      template: "templates/report_markdown.md"
+      purpose: "UI presentation and quick reading"
+    - format: "PDF"
+      generator: "WeasyPrint"
+      template: "templates/report_pdf.html"
+      css: "templates/styles/report.css"
+      purpose: "Formal executive deliverables"
+    - format: "JSON"
+      generator: "Pydantic"
+      schema: "specs/schemas/final_report_schema.json"
+      purpose: "Vector-ready for ChromaDB/Pinecone"
+      optimization:
+        - "Chunking for vectorization"
+        - "Embedding metadata"
+        - "Source references"
+
+# ============================================================
+# Pipeline Architecture (5 Programmatic Phases)
+# ============================================================
+pipeline:
+  phases:
+    - id: 0
+      name: "disambiguation"
+      display_name: "Phase 0 · Disambiguation"
+      layer: "frontend + backend"
+      description: "User inputs game title → system queries IGDB/RAWG → user selects exact game (ID + year)"
+      artifacts:
+        - "specs/scraper/pre_scrap_contract.yaml"
+        - "specs/scraper/pre_scrap_contract.md"
+
+    - id: 1
+      name: "ingestion"
+      display_name: "Phase 1 · Ingestion"
+      layer: "backend"
+      description: "Deterministic extraction combining direct APIs and Tavily predefined searches"
+      artifacts:
+        - "specs/scraper/scraper_contract.yaml"
+        - "specs/scraper/data_crud_contract.yaml"
+
+    - id: 2
+      name: "consolidation"
+      display_name: "Phase 2 · Consolidation"
+      layer: "backend"
+      description: "Clean, partition, and package into Master-JSON"
+      artifacts:
+        - "specs/scraper/master_json_schema.yaml"
+
+    - id: 3
+      name: "parallel_analysis"
+      display_name: "Phase 3 · Parallel Analysis"
+      layer: "backend"
+      description: "Distribute Master-JSON via Celery to 4 Macro-Skills powered by Gemini"
+      artifacts:
+        - "specs/macro_skills/design_art_skill.yaml"
+        - "specs/macro_skills/ux_skill.yaml"
+        - "specs/macro_skills/tech_systems_skill.yaml"
+        - "specs/macro_skills/strategy_market_skill.yaml"
+
+    - id: 4
+      name: "synthesis"
+      display_name: "Phase 4 · Synthesis"
+      layer: "backend"
+      description: "Unify results using Gemini as main editor → Markdown, PDF, JSON"
+      artifacts:
+        - "specs/synthesis/synthesis_skill.yaml"
+
+# ============================================================
+# Analytical Framework (17 Categories → 4 Macro-Skills)
+# ============================================================
+macro_skills:
+  - id: "macro_1"
+    name: "design_and_art"
+    display_name: "Design and Art"
+    description: "Gameplay, Level Design, Narrative, Art Direction, Sound Design"
+    categories:
+      - "Gameplay"
+      - "Level Design"
+      - "Narrative"
+      - "Art Direction"
+      - "Sound Design"
+    ai_model: "gemini-2.5-flash"
+    max_tokens: 8000
+
+  - id: "macro_2"
+    name: "user_experience"
+    display_name: "User Experience"
+    description: "UI/UX, Accessibility, Localization"
+    categories:
+      - "UI/UX"
+      - "Accessibility"
+      - "Localization"
+    ai_model: "gemini-2.5-flash"
+    max_tokens: 6000
+
+  - id: "macro_3"
+    name: "technology_and_systems"
+    display_name: "Technology and Systems"
+    description: "Technology/Performance, Multiplayer/Social, Platforms/Distribution"
+    categories:
+      - "Technology/Performance"
+      - "Multiplayer/Social"
+      - "Platforms/Distribution"
+    ai_model: "gemini-2.5-flash"
+    max_tokens: 6000
+
+  - id: "macro_4"
+    name: "strategy_and_market"
+    display_name: "Strategy and Market"
+    description: "Audience, Business Model, Retention/Live Ops, Production/Business, Marketing, Cultural Impact"
+    categories:
+      - "Audience"
+      - "Business Model"
+      - "Retention/Live Ops"
+      - "Production/Business"
+      - "Marketing"
+      - "Cultural Impact"
+    ai_model: "gemini-2.5-flash"
+    max_tokens: 8000
+
+# ============================================================
+# Design System
+# ============================================================
+design_system:
+  name: "Globant Enterprise Dark Mode — Game Library Edition"
+  tokens:
+    colors:
+      bg: "#0A0A0A"
+      surface: "#161616"
+      elevated: "#1C1C1C"
+      hover: "#222222"
+      border: "#2A2A2A"
+      border_hover: "#3A3A3A"
+      accent: "#3B82F6"
+      accent_light: "#60A5FA"
+      accent_dark: "#2563EB"
+      accent_glow: "rgba(59,130,246,0.15)"
+      secondary: "#8B5CF6"
+      secondary_light: "#A78BFA"
+      text_primary: "#F5F5F5"
+      text_secondary: "#A3A3A3"
+      text_muted: "#737373"
+      text_disabled: "#525252"
+      success: "#22C55E"
+      warning: "#EAB308"
+      danger: "#EF4444"
+    typography:
+      family: "Inter, system-ui, sans-serif"
+      sizes:
+        xs: "0.75rem"
+        sm: "0.875rem"
+        base: "1rem"
+        lg: "1.125rem"
+        xl: "1.25rem"
+        "2xl": "1.5rem"
+        "3xl": "1.875rem"
+    spacing:
+      xs: "0.25rem"
+      sm: "0.5rem"
+      md: "1rem"
+      lg: "1.5rem"
+      xl: "2rem"
+      "2xl": "2.5rem"
+    radius:
+      sm: "8px"
+      md: "10px"
+      lg: "12px"
+      xl: "14px"
+      "2xl": "16px"
+      full: "9999px"
+    effects:
+      glass: "backdrop-blur(20px)"
+      glow_border: "0 0 0 1px #2A2A2A, 0 0 20px rgba(59,130,246,0.08)"
+      glow_border_hover: "0 0 0 1px #3B82F6, 0 0 30px rgba(59,130,246,0.15)"
+      shadow_card: "0 4px 24px rgba(0,0,0,0.4)"
+      shadow_modal: "0 24px 48px rgba(0,0,0,0.6)"
+    animations:
+      fade_in: "0.4s ease-out"
+      slide_up: "0.3s ease-out"
+      pulse_dot: "2s ease-in-out infinite"
+      card_hover: "0.5s cubic-bezier(0.4,0,0.2,1)"
+
+# ============================================================
+# Definition of Done
+# ============================================================
+definition_of_done:
+  - description: "Pipeline works end-to-end without manual intervention after disambiguation"
+    criterion: "end_to_end_automation"
+
+  - description: "Total parallel processing latency does not exceed 10 minutes per title"
+    criterion: "performance_10min"
+    threshold: "<= 600 seconds"
+
+  - description: "System demonstrates generalization by successfully processing at least 2 different games"
+    criterion: "generalization"
+    examples:
+      - "League of Legends (MOBA, Riot Games)"
+      - "The Legend of Zelda: Tears of the Kingdom (Adventure, Nintendo)"
+
+  - description: "All OpenSpec artifacts are documented, frozen, and stored in the repository"
+    criterion: "spec_freeze"
+
+  - description: "17 thematic categories are strictly grouped into 4 Macro-Skills"
+    criterion: "macro_skill_grouping"
+
+  - description: "Main system contract is Master-JSON schema and Macro-Skill output schemas"
+    criterion: "schema_contract"
+
+# ============================================================
+# Environment Variables
+# ============================================================
+environment:
+  required:
+    - name: "GEMINI_API_KEY"
+      description: "Google Gemini API key"
+    - name: "IGDB_CLIENT_ID"
+      description: "Twitch Client ID for IGDB"
+    - name: "IGDB_CLIENT_SECRET"
+      description: "Twitch Client Secret for IGDB"
+    - name: "RAWG_API_KEY"
+      description: "RAWG API key"
+    - name: "TAVILY_API_KEY"
+      description: "Tavily API key"
+    - name: "REDIS_URL"
+      description: "Redis connection URL"
+      default: "redis://localhost:6379/0"
+    - name: "DATABASE_URL"
+      description: "PostgreSQL connection URL"
+    - name: "JWT_SECRET_KEY"
+      description: "RS256 private key for JWT signing"
+    - name: "GOOGLE_CLIENT_ID"
+      description: "Google OAuth2 Client ID"
+    - name: "MICROSOFT_CLIENT_ID"
+      description: "Microsoft OAuth2 Client ID"
+    - name: "OKTA_DOMAIN"
+      description: "Okta organization domain"
+
+  optional:
+    - name: "LOG_LEVEL"
+      description: "Application log level"
+      default: "INFO"
+      options: ["DEBUG", "INFO", "WARNING", "ERROR"]
+    - name: "MAX_CONCURRENT_TASKS"
+      description: "Maximum Celery concurrent tasks"
+      default: "4"
+    - name: "REQUEST_TIMEOUT"
+      description: "HTTP request timeout in seconds"
+      default: "30"
+    - name: "PIPELINE_MAX_LATENCY_SECONDS"
+      description: "Maximum allowed pipeline latency"
+      default: "600"

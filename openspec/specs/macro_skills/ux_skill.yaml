@@ -1,0 +1,824 @@
+schema: spec-driven
+
+# ============================================================
+# Artifact: ux_skill.yaml
+# Domain: Macro-Skill — User Experience Analysis
+# Phase: 3 (Parallel Analysis)
+# Status: draft
+# ============================================================
+
+artifact:
+  id: ux_skill
+  name: User Experience Macro-Skill
+  version: "1.0.0"
+  author: GetSmart Team
+  created_at: "2026-06-17"
+  status: draft
+  description: |
+    Analyzes user experience elements across 3 thematic categories:
+    UI/UX, Accessibility, and Localization.
+    Receives the User Experience Mini-Context produced by Phase 1 and defined by
+    `master_json_schema.yaml`. Outputs structured intelligence for the Synthesizer (Phase 4).
+
+# ============================================================
+# 1. INPUT CONTRACT
+# ============================================================
+input:
+  source: "mini_contexts.user_experience"
+  schema_ref: "master_json_schema.yaml#/definitions/mini_context_user_experience"
+  description: |
+    Receives exclusively the User Experience Mini-Context containing:
+    - metadata: Worker execution info
+    - hard_data: Structured data from IGDB, Steam (platforms, languages, requirements, controller support)
+    - semantic_data: Tavily sources organized by 3 categories + Steam reviews sample
+    - evidence_count & confidence_score
+
+  data_includes:
+    hard_data:
+      - platforms, languages_supported
+      - system_requirements (minimum, recommended)
+      - controller_support, full_controller_support
+      - steam_cloud, steam_achievements
+    semantic_data:
+      - ui_ux.sources[]
+      - accessibility.sources[]
+      - localization.sources[]
+      - steam_reviews_sample (positive_count, negative_count, review_score, sample_reviews[])
+
+# ============================================================
+# 2. OUTPUT CONTRACT
+# ============================================================
+output:
+  format: "application/json"
+  schema_version: "1.0.0"
+  description: |
+    Structured analysis JSON. Each category contains synthesized intelligence,
+    NOT raw copied data. The LLM analyzes, summarizes, and categorizes
+    evidence into actionable insights for the Synthesizer.
+
+  root_schema:
+    type: object
+    required: ["metadata", "analysis", "summary", "confidence"]
+
+    properties:
+      # =====================================================================
+      # 2.1 METADATA
+      # =====================================================================
+      metadata:
+        type: object
+        required: ["skill_id", "skill_name", "game_id", "game_name", "generated_at", "model_used"]
+        properties:
+          skill_id:
+            type: string
+            const: "user_experience"
+          skill_name:
+            type: string
+            const: "User Experience"
+          game_id:
+            type: string
+            format: uuid
+          game_name:
+            type: string
+          generated_at:
+            type: string
+            format: date-time
+          model_used:
+            type: string
+            const: "gemini-2.5-flash"
+          input_evidence_count:
+            type: integer
+            minimum: 0
+          input_confidence_score:
+            type: number
+            minimum: 0.0
+            maximum: 1.0
+
+      # =====================================================================
+      # 2.2 ANALYSIS (3 Categories)
+      # =====================================================================
+      analysis:
+        type: object
+        required: ["ui_ux", "accessibility", "localization"]
+        properties:
+          # -----------------------------------------------------------------
+          # UI/UX
+          # -----------------------------------------------------------------
+          ui_ux:
+            type: object
+            required: ["category_id", "category_name", "overview", "interface_design", "navigation_flow", "hud_effectiveness", "input_responsiveness", "onboarding_quality", "friction_points", "sources_cited"]
+            properties:
+              category_id:
+                type: string
+                const: "ui_ux"
+              category_name:
+                type: string
+                const: "UI/UX"
+              overview:
+                type: string
+                description: "Executive summary of UI/UX design (2-3 sentences)"
+              interface_design:
+                type: object
+                properties:
+                  visual_clarity:
+                    type: string
+                    enum: ["poor", "average", "good", "excellent"]
+                  information_hierarchy:
+                    type: string
+                    enum: ["confusing", "functional", "clear", "intuitive"]
+                  aesthetic_integration:
+                    type: string
+              navigation_flow:
+                type: object
+                properties:
+                  menu_efficiency:
+                    type: string
+                    enum: ["cumbersome", "acceptable", "efficient", "streamlined"]
+                  learning_curve:
+                    type: string
+                    enum: ["steep", "moderate", "gentle", "invisible"]
+                  button_presses_required:
+                    type: string
+              hud_effectiveness:
+                type: object
+                properties:
+                  information_density:
+                    type: string
+                    enum: ["sparse", "moderate", "dense", "overwhelming"]
+                  customization:
+                    type: string
+                    enum: ["none", "limited", "moderate", "extensive"]
+                  clutter:
+                    type: string
+              input_responsiveness:
+                type: object
+                properties:
+                  controller_kbm_parity:
+                    type: string
+                    enum: ["poor", "uneven", "good", "seamless"]
+                  input_lag:
+                    type: string
+                  remapping:
+                    type: string
+              onboarding_quality:
+                type: object
+                properties:
+                  tutorial_effectiveness:
+                    type: string
+                    enum: ["insufficient", "adequate", "good", "exemplary"]
+                  progressive_disclosure:
+                    type: string
+              friction_points:
+                type: array
+                items:
+                  type: object
+                  required: ["issue", "severity", "player_impact"]
+                  properties:
+                    issue:
+                      type: string
+                    severity:
+                      type: string
+                      enum: ["minor", "moderate", "major", "critical"]
+                    player_impact:
+                      type: string
+              sources_cited:
+                type: array
+                items:
+                  type: object
+                  required: ["url", "platform", "relevance"]
+                  properties:
+                    url: { type: string, format: uri }
+                    platform:
+                      type: string
+                      enum: ["reddit", "youtube", "blogs", "press", "steam_reviews", "stackoverflow", "forums"]
+                    relevance: { type: string }
+
+          # -----------------------------------------------------------------
+          # ACCESSIBILITY
+          # -----------------------------------------------------------------
+          accessibility:
+            type: object
+            required: ["category_id", "category_name", "overview", "visual_accessibility", "motor_accessibility", "cognitive_accessibility", "auditory_accessibility", "platform_accessibility", "compliance_assessment", "sources_cited"]
+            properties:
+              category_id:
+                type: string
+                const: "accessibility"
+              category_name:
+                type: string
+                const: "Accessibility"
+              overview:
+                type: string
+              visual_accessibility:
+                type: object
+                properties:
+                  colorblind_modes:
+                    type: string
+                    enum: ["not_present", "basic", "comprehensive"]
+                  text_size_options:
+                    type: string
+                    enum: ["not_present", "limited", "full"]
+                  contrast_options:
+                    type: string
+                    enum: ["not_present", "limited", "full"]
+                  ui_scale:
+                    type: string
+                    enum: ["not_present", "limited", "full"]
+                  notes:
+                    type: string
+              motor_accessibility:
+                type: object
+                properties:
+                  control_remapping:
+                    type: string
+                    enum: ["none", "presets_only", "full", "per_action"]
+                  adaptive_controller_support:
+                    type: string
+                    enum: ["not_present", "partial", "full"]
+                  one_handed_modes:
+                    type: string
+                    enum: ["not_present", "partial", "full"]
+                  input_alternatives:
+                    type: string
+                    enum: ["not_present", "partial", "full"]
+                  notes:
+                    type: string
+              cognitive_accessibility:
+                type: object
+                properties:
+                  difficulty_options:
+                    type: string
+                    enum: ["none", "preset_modes", "granular", "adaptive"]
+                  ui_simplification:
+                    type: string
+                    enum: ["not_present", "partial", "full"]
+                  guidance_systems:
+                    type: string
+                    enum: ["not_present", "partial", "full"]
+                  pause_functionality:
+                    type: string
+                    enum: ["not_present", "partial", "full"]
+                  notes:
+                    type: string
+              auditory_accessibility:
+                type: object
+                properties:
+                  subtitles:
+                    type: string
+                    enum: ["none", "basic", "good", "excellent"]
+                  subtitle_customization:
+                    type: string
+                    enum: ["not_present", "limited", "full"]
+                  visual_sound_cues:
+                    type: string
+                    enum: ["not_present", "partial", "full"]
+                  closed_captions:
+                    type: string
+                    enum: ["not_present", "partial", "full"]
+                  notes:
+                    type: string
+              platform_accessibility:
+                type: object
+                properties:
+                  screen_reader_support:
+                    type: string
+                    enum: ["not_present", "partial", "full"]
+                  os_integration:
+                    type: string
+                    enum: ["not_present", "partial", "full"]
+                  notes:
+                    type: string
+              compliance_assessment:
+                type: object
+                properties:
+                  xag_compliance:
+                    type: string
+                    enum: ["non_compliant", "partial", "compliant", "exemplary"]
+                  cvaa_compliance:
+                    type: string
+                    enum: ["non_compliant", "partial", "compliant", "exemplary"]
+                  industry_benchmark:
+                    type: string
+                  gaps:
+                    type: array
+                    items: { type: string }
+                  recommendations:
+                    type: array
+                    items: { type: string }
+              sources_cited:
+                type: array
+                items:
+                  type: object
+                  required: ["url", "platform", "relevance"]
+                  properties:
+                    url: { type: string, format: uri }
+                    platform:
+                      type: string
+                      enum: ["reddit", "youtube", "blogs", "press", "steam_reviews", "stackoverflow", "forums"]
+                    relevance: { type: string }
+
+          # -----------------------------------------------------------------
+          # LOCALIZATION
+          # -----------------------------------------------------------------
+          localization:
+            type: object
+            required: ["category_id", "category_name", "overview", "language_coverage", "translation_quality", "cultural_adaptation", "technical_localization", "regional_pricing", "community_reception", "sources_cited"]
+            properties:
+              category_id:
+                type: string
+                const: "localization"
+              category_name:
+                type: string
+                const: "Localization"
+              overview:
+                type: string
+              language_coverage:
+                type: object
+                properties:
+                  supported_languages:
+                    type: integer
+                  major_markets_covered:
+                    type: array
+                    items: { type: string }
+                  notable_gaps:
+                    type: array
+                    items: { type: string }
+                  priority_additions:
+                    type: array
+                    items: { type: string }
+              translation_quality:
+                type: object
+                properties:
+                  english: { type: string, enum: ["poor", "average", "good", "excellent", "native_quality"] }
+                  japanese: { type: string, enum: ["poor", "average", "good", "excellent", "native_quality"] }
+                  spanish: { type: string, enum: ["poor", "average", "good", "excellent", "native_quality"] }
+                  french: { type: string, enum: ["poor", "average", "good", "excellent", "native_quality"] }
+                  german: { type: string, enum: ["poor", "average", "good", "excellent", "native_quality"] }
+                  russian: { type: string, enum: ["poor", "average", "good", "excellent", "native_quality"] }
+                  chinese: { type: string, enum: ["poor", "average", "good", "excellent", "native_quality"] }
+                  notes: { type: string }
+              cultural_adaptation:
+                type: object
+                properties:
+                  cultural_sensitivity:
+                    type: string
+                    enum: ["insensitive", "neutral", "respectful", "authentic"]
+                  regional_references:
+                    type: string
+                  idiom_handling:
+                    type: string
+                  notes:
+                    type: string
+              technical_localization:
+                type: object
+                properties:
+                  text_rendering:
+                    type: string
+                    enum: ["broken", "functional", "polished", "seamless"]
+                  font_support:
+                    type: string
+                    enum: ["poor", "average", "good", "excellent"]
+                  rtl_support:
+                    type: string
+                    enum: ["not_present", "partial", "full"]
+                  ui_overflow:
+                    type: string
+                  notes:
+                    type: string
+              regional_pricing:
+                type: object
+                properties:
+                  pricing_strategy:
+                    type: string
+                    enum: ["uniform", "regionalized", "tiered", "emerging_market_friendly"]
+                  base_price_usd:
+                    type: number
+                  regional_variations:
+                    type: object
+                  notes:
+                    type: string
+              community_reception:
+                type: object
+                properties:
+                  per_language_feedback:
+                    type: object
+                  common_complaints:
+                    type: array
+                    items: { type: string }
+              sources_cited:
+                type: array
+                items:
+                  type: object
+                  required: ["url", "platform", "relevance"]
+                  properties:
+                    url: { type: string, format: uri }
+                    platform:
+                      type: string
+                      enum: ["reddit", "youtube", "blogs", "press", "steam_reviews", "stackoverflow", "forums"]
+                    relevance: { type: string }
+
+      # =====================================================================
+      # 2.3 CROSS-CATEGORY SUMMARY
+      # =====================================================================
+      summary:
+        type: object
+        required: ["ux_philosophy", "standout_strengths", "critical_weaknesses", "target_audience_alignment", "competitive_positioning", "priority_recommendations"]
+        properties:
+          ux_philosophy:
+            type: string
+            description: "Core UX philosophy that unifies all 3 categories (1 paragraph)"
+          standout_strengths:
+            type: array
+            items: { type: string }
+            description: "Top 3-5 strengths across all categories"
+          critical_weaknesses:
+            type: array
+            items: { type: string }
+            description: "Top 2-4 weaknesses or areas for improvement"
+          target_audience_alignment:
+            type: object
+            properties:
+              primary_audience:
+                type: string
+              appeal_factors:
+                type: array
+                items: { type: string }
+              potential_barriers:
+                type: array
+                items: { type: string }
+          competitive_positioning:
+            type: object
+            properties:
+              genre_benchmark:
+                type: string
+              unique_selling_points:
+                type: array
+                items: { type: string }
+              comparable_titles:
+                type: array
+                items: { type: string }
+          priority_recommendations:
+            type: array
+            items:
+              type: object
+              required: ["recommendation", "category", "impact", "effort", "roi_rationale"]
+              properties:
+                recommendation:
+                  type: string
+                category:
+                  type: string
+                  enum: ["ui_ux", "accessibility", "localization"]
+                impact:
+                  type: string
+                  enum: ["low", "medium", "high", "critical"]
+                effort:
+                  type: string
+                  enum: ["low", "medium", "high"]
+                roi_rationale:
+                  type: string
+
+      # =====================================================================
+      # 2.4 CONFIDENCE METRICS
+      # =====================================================================
+      confidence:
+        type: object
+        required: ["overall_score", "category_scores", "data_quality_notes"]
+        properties:
+          overall_score:
+            type: number
+            minimum: 0.0
+            maximum: 1.0
+          category_scores:
+            type: object
+            properties:
+              ui_ux: { type: number, minimum: 0.0, maximum: 1.0 }
+              accessibility: { type: number, minimum: 0.0, maximum: 1.0 }
+              localization: { type: number, minimum: 0.0, maximum: 1.0 }
+          data_quality_notes:
+            type: array
+            items: { type: string }
+            description: "Notes on data gaps, conflicting sources, or low-confidence areas"
+
+# ============================================================
+# 3. SYSTEM PROMPT
+# ============================================================
+system_prompt: |
+  You are the User Experience Analyst for GetSmart, a professional game intelligence platform.
+
+  Your role is to analyze the provided Mini-Context (hard data + semantic evidence) and produce
+  a structured, professional intelligence report covering 3 categories: UI/UX, Accessibility,
+  and Localization.
+
+  ## Core Rules:
+  1. ANALYZE, don't copy. Synthesize evidence into insights. Do not paste raw snippets.
+  2. Cite sources. Every claim must reference at least one source from the context.
+  3. Be honest about gaps. If evidence is sparse, state it and adjust confidence scores.
+  4. Use enums strictly. Only use values defined in the output schema.
+  5. Target audience: UX designers, producers, and QA leads who need actionable intelligence.
+  6. Prioritize player friction. Focus on what causes player drop-off or negative sentiment.
+
+  ## Analysis Guidelines:
+  - UI/UX: Focus on menu efficiency, HUD clarity, input responsiveness, onboarding flow
+  - Accessibility: Evaluate against Xbox Accessibility Guidelines (XAG) and CVAA standards
+  - Localization: Assess translation quality, cultural sensitivity, technical readiness, regional pricing
+
+  ## Tone:
+  Professional, empathetic to players, solution-oriented. Identify problems but also propose
+  improvement directions. Use specific examples from evidence. When comparing to industry
+  standards, reference specific accessible games (e.g., The Last of Us Part II, Forza Horizon 5).
+
+# ============================================================
+# 4. ANTI-HALLUCINATION GUARDS
+# ============================================================
+anti_hallucination:
+  rules:
+    - rule: "source_attribution"
+      description: "Every analytical claim must include at least one citation from semantic_data.sources or steam_reviews_sample"
+      enforcement: "strict"
+
+    - rule: "enum_constraint"
+      description: "Only use enum values defined in the schema. No free-text ratings."
+      enforcement: "strict"
+
+    - rule: "evidence_threshold"
+      description: "If a category has < 3 sources, flag as low-confidence and reduce score"
+      enforcement: "automatic"
+      threshold: 3
+
+    - rule: "no_invented_data"
+      description: "Never invent sales figures, review scores, or specific quotes not in context"
+      enforcement: "strict"
+
+    - rule: "confidence_transparency"
+      description: "Explicitly state data quality issues in confidence.data_quality_notes"
+      enforcement: "mandatory"
+
+    - rule: "steam_review_grounding"
+      description: "UX claims must align with Steam review sentiment when available"
+      enforcement: "strict"
+
+# ============================================================
+# 5. CHUNKING STRATEGY
+# ============================================================
+chunking:
+  strategy: "category_parallel"
+  description: |
+    Each of the 3 categories can be analyzed independently if the full context
+    exceeds the model's input window. UX Mini-Contexts typically fit within 2M tokens.
+
+  fallback:
+    enabled: true
+    trigger: "input_tokens > 1,800,000"
+    method: "category_sequential"
+    description: "Analyze categories one by one, passing hard_data + relevant semantic_data each time"
+
+# ============================================================
+# 6. CACHING
+# ============================================================
+caching:
+  enabled: true
+  strategy: "deterministic_hash"
+  key_format: "skill:user_experience:{game_id}:{input_hash}"
+  ttl_seconds: 86400
+  description: |
+    Cache responses to avoid re-analyzing identical Mini-Contexts.
+    Invalidated when Master-JSON version changes or new evidence is scraped.
+
+# ============================================================
+# 7. MODEL CONFIGURATION
+# ============================================================
+model:
+  name: "gemini-2.5-flash"
+  provider: "google"
+  temperature: 0.3
+  max_output_tokens: 6000
+  top_p: 0.95
+  top_k: 40
+
+# ============================================================
+# 8. ERROR HANDLING
+# ============================================================
+error_handling:
+  retry_policy:
+    max_retries: 3
+    backoff: exponential
+    initial_delay_ms: 1000
+    max_delay_ms: 30000
+
+  fallback_behavior:
+    description: "If analysis fails after retries, return minimal structure with error flags"
+    output:
+      metadata:
+        skill_id: "user_experience"
+        skill_name: "User Experience"
+        generated_at: "ISO8601"
+        model_used: "gemini-2.5-flash"
+      analysis:
+        ui_ux: { category_id: "ui_ux", category_name: "UI/UX", overview: "Analysis failed", error: true }
+        accessibility: { category_id: "accessibility", category_name: "Accessibility", overview: "Analysis failed", error: true }
+        localization: { category_id: "localization", category_name: "Localization", overview: "Analysis failed", error: true }
+      summary:
+        ux_philosophy: "Analysis could not be completed due to system error."
+        standout_strengths: []
+        critical_weaknesses: []
+        priority_recommendations: []
+      confidence:
+        overall_score: 0.0
+        category_scores:
+          ui_ux: 0.0
+          accessibility: 0.0
+          localization: 0.0
+        data_quality_notes: ["System error prevented analysis."]
+
+# ============================================================
+# 9. EXAMPLE OUTPUT (Elden Ring)
+# ============================================================
+example_output:
+  metadata:
+    skill_id: "user_experience"
+    skill_name: "User Experience"
+    game_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+    game_name: "Elden Ring"
+    generated_at: "2026-06-17T15:15:00Z"
+    model_used: "gemini-2.5-flash"
+    input_evidence_count: 18
+    input_confidence_score: 0.78
+
+  analysis:
+    ui_ux:
+      category_id: "ui_ux"
+      category_name: "UI/UX"
+      overview: "Functional but dated interface design that prioritizes atmospheric immersion over usability efficiency."
+      interface_design:
+        visual_clarity: "average"
+        information_hierarchy: "functional"
+        aesthetic_integration: "Parchment/map aesthetic aligns with fantasy theme but reduces readability."
+      navigation_flow:
+        menu_efficiency: "cumbersome"
+        learning_curve: "steep"
+        button_presses_required: "High — equipping items requires 4+ button presses."
+      hud_effectiveness:
+        information_density: "moderate"
+        customization: "limited"
+        clutter: "Minimal HUD supports immersion but lacks customization."
+      input_responsiveness:
+        controller_kbm_parity: "uneven"
+        input_lag: "Minor input buffering issues reported."
+        remapping: "Full controller remapping available."
+      onboarding_quality:
+        tutorial_effectiveness: "insufficient"
+        progressive_disclosure: "Minimal guidance. Systems never explicitly explained."
+      friction_points:
+        - issue: "Inventory management requires excessive navigation"
+          severity: "moderate"
+          player_impact: "Frequent complaint in Steam reviews."
+        - issue: "No pause function in single-player"
+          severity: "major"
+          player_impact: "Accessibility and quality-of-life concern."
+      sources_cited:
+        - url: "https://steamcommunity.com/app/1245620/reviews/..."
+          platform: "steam_reviews"
+          relevance: "Recurring UI complaints"
+
+    accessibility:
+      category_id: "accessibility"
+      category_name: "Accessibility"
+      overview: "Severely lacking in accessibility features. Follows FromSoftware's minimal-accessibility philosophy."
+      visual_accessibility:
+        colorblind_modes: "not_present"
+        text_size_options: "not_present"
+        contrast_options: "not_present"
+        ui_scale: "not_present"
+        notes: "No visual accessibility options."
+      motor_accessibility:
+        control_remapping: "full"
+        adaptive_controller_support: "partial"
+        one_handed_modes: "not_present"
+        input_alternatives: "not_present"
+        notes: "Controller remapping available. No auto-attack options."
+      cognitive_accessibility:
+        difficulty_options: "none"
+        ui_simplification: "not_present"
+        guidance_systems: "not_present"
+        pause_functionality: "not_present"
+        notes: "No difficulty settings. No quest log or objective markers."
+      auditory_accessibility:
+        subtitles: "partial"
+        subtitle_customization: "not_present"
+        visual_sound_cues: "not_present"
+        closed_captions: "not_present"
+        notes: "Basic subtitles only. No customization."
+      platform_accessibility:
+        screen_reader_support: "not_present"
+        os_integration: "not_present"
+        notes: "No OS-level accessibility integration."
+      compliance_assessment:
+        xag_compliance: "non_compliant"
+        cvaa_compliance: "non_compliant"
+        industry_benchmark: "Below standards set by TLOU2, Forza Horizon 5."
+        gaps:
+          - "No difficulty options"
+          - "No visual accessibility features"
+          - "No pause in single-player"
+        recommendations:
+          - "Implement 2-3 difficulty presets"
+          - "Add colorblind filters and UI scaling"
+          - "Enable pause in offline single-player"
+      sources_cited:
+        - url: "https://caniplaythat.com/..."
+          platform: "blogs"
+          relevance: "Accessibility review"
+
+    localization:
+      category_id: "localization"
+      category_name: "Localization"
+      overview: "Broad language coverage with competent translation quality. 12 languages supported."
+      language_coverage:
+        supported_languages: 12
+        major_markets_covered: ["English", "Japanese", "Korean", "Chinese", "Spanish", "French", "German", "Russian"]
+        notable_gaps: ["Arabic", "Hindi", "Turkish", "Vietnamese"]
+        priority_additions: ["Arabic (MENA market)", "Turkish (growing market)"]
+      translation_quality:
+        english: "native_quality"
+        japanese: "native_quality"
+        spanish: "good"
+        french: "good"
+        german: "good"
+        russian: "average"
+        chinese: "good"
+        notes: "Japanese and English are original languages."
+      cultural_adaptation:
+        cultural_sensitivity: "respectful"
+        regional_references: "Minimal real-world references."
+        idiom_handling: "Functional."
+        notes: "Fantasy setting avoids cultural pitfalls."
+      technical_localization:
+        text_rendering: "functional"
+        font_support: "good"
+        rtl_support: "not_present"
+        ui_overflow: "Minor issues in German and Russian."
+        notes: "No RTL support. Some CJK issues at launch (patched)."
+      regional_pricing:
+        pricing_strategy: "regionalized"
+        base_price_usd: 59.99
+        notes: "Steam regional pricing applied."
+      community_reception:
+        per_language_feedback:
+          english: "Overwhelmingly positive"
+          japanese: "Positive"
+          chinese: "Positive, minor lore term complaints"
+        common_complaints:
+          - "Lore term consistency"
+          - "Font readability in Chinese"
+      sources_cited:
+        - url: "https://steamcommunity.com/app/1245620/reviews/..."
+          platform: "steam_reviews"
+          relevance: "Per-language sentiment"
+
+  summary:
+    ux_philosophy: "Elden Ring's UX prioritizes atmospheric immersion and intentional friction over modern usability."
+    standout_strengths:
+      - "Minimal HUD preserves immersion"
+      - "Broad language coverage (12 languages)"
+      - "Full controller remapping"
+    critical_weaknesses:
+      - "No accessibility features"
+      - "Cumbersome menu navigation"
+      - "No pause function"
+      - "Insufficient onboarding"
+    target_audience_alignment:
+      primary_audience: "Experienced gamers comfortable with high-friction UX"
+      appeal_factors:
+        - "Sense of discovery from lack of handholding"
+        - "Atmospheric UI"
+      potential_barriers:
+        - "Players with disabilities"
+        - "Casual gamers"
+        - "Players who prefer modern UX"
+    competitive_positioning:
+      genre_benchmark: "Behind industry UX standards."
+      unique_selling_points:
+        - "Intentional friction as design philosophy"
+      comparable_titles:
+        - "Dark Souls III (same UX)"
+        - "The Last of Us Part II (opposite philosophy)"
+    priority_recommendations:
+      - recommendation: "Implement 2-3 difficulty presets"
+        category: "accessibility"
+        impact: "critical"
+        effort: "medium"
+        roi_rationale: "Highest-impact change. Addresses #1 complaint."
+      - recommendation: "Add pause for offline single-player"
+        category: "ui_ux"
+        impact: "high"
+        effort: "low"
+        roi_rationale: "Low effort, high satisfaction."
+
+  confidence:
+    overall_score: 0.78
+    category_scores:
+      ui_ux: 0.85
+      accessibility: 0.75
+      localization: 0.80
+    data_quality_notes:
+      - "Strong Steam review sample for UI/UX"
+      - "Accessibility analysis relies on specialist reviews"
+      - "Localization data partially inferred from support lists"

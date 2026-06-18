@@ -1,0 +1,542 @@
+schema: spec-driven
+
+# ============================================================
+# Artifact: pre_scrap_contract.yaml
+# Domain: Disambiguation (Phase 0)
+# Status: draft
+# ============================================================
+
+artifact:
+  id: pre_scrap_contract
+  name: Pre-Scrap & Disambiguation Contract
+  version: "1.0.0"
+  author: GetSmart Team
+  created_at: "2026-06-17"
+  status: draft
+  description: |
+    Defines the disambiguation flow: user inputs a game title, the system queries
+    IGDB and RAWG APIs to find candidates, presents them to the user for selection,
+    and confirms the exact game (ID + release year) before triggering the pipeline.
+    This contract prevents homonym collisions and ensures deterministic ingestion.
+
+# ============================================================
+# 1. FLOW DIAGRAM (Mermaid)
+# ============================================================
+flow:
+  mermaid: |
+    flowchart TD
+      A[User types game title] --> B{Input valid?}
+      B -->|No| C[Show validation error]
+      C --> A
+      B -->|Yes| D[Query IGDB API]
+      D --> E[Query RAWG API]
+      E --> F{Any results?}
+      F -->|No| G[Show "No games found"]
+      G --> A
+      F -->|Yes| H[Merge & deduplicate candidates]
+      H --> I[Render disambiguation list]
+      I --> J[User selects game]
+      J --> K{Selection valid?}
+      K -->|No| I
+      K -->|Yes| L[Confirm game_id + year]
+      L --> M[Enable "Run Pipeline" button]
+      M --> N[User clicks Run Pipeline]
+      N --> O[POST /api/v1/pipeline/run]
+      O --> P[Return pipeline_id]
+      P --> Q[Show Pipeline Modal]
+
+# ============================================================
+# 2. DATA SOURCES
+# ============================================================
+data_sources:
+  primary:
+    - name: "IGDB API"
+      endpoint: "https://api.igdb.com/v4/games"
+      method: "POST"
+      auth_type: "OAuth2 (Twitch)"
+      timeout_ms: 5000
+      retry_policy:
+        max_retries: 2
+        backoff: "exponential"
+      query_template: |
+        fields id, name, first_release_date, platforms.name, 
+               involved_companies.company.name, involved_companies.developer,
+               genres.name, cover.url, summary;
+        search "{query}";
+        limit 10;
+
+    - name: "RAWG API"
+      endpoint: "https://api.rawg.io/api/games"
+      method: "GET"
+      auth_type: "API Key"
+      timeout_ms: 5000
+      retry_policy:
+        max_retries: 2
+        backoff: "exponential"
+      query_params:
+        search: "{query}"
+        key: "${RAWG_API_KEY}"
+        page_size: 10
+
+  fallback:
+    - name: "Steam Storefront API"
+      endpoint: "https://store.steampowered.com/api/storesearch/"
+      method: "GET"
+      auth_type: "None"
+      timeout_ms: 3000
+      query_params:
+        term: "{query}"
+        l: "english"
+        cc: "US"
+
+# ============================================================
+# 3. CANDIDATE SCHEMA
+# ============================================================
+candidate_schema:
+  $id: "https://getsmart.dev/schemas/v1/game-candidate"
+  type: object
+  required: ["id", "name", "release_year", "sources"]
+  properties:
+    id:
+      type: string
+      description: "Canonical game ID (IGDB ID preferred)"
+    name:
+      type: string
+      description: "Game title"
+    slug:
+      type: string
+      description: "URL-friendly slug"
+    release_year:
+      type: integer
+      description: "Release year"
+    release_date:
+      type: string
+      format: date
+      description: "Full release date if available"
+    developer:
+      type: string
+      description: "Primary developer"
+    publisher:
+      type: string
+      description: "Primary publisher"
+    platforms:
+      type: array
+      items:
+        type: string
+      description: "Available platforms"
+    genres:
+      type: array
+      items:
+        type: string
+      description: "Game genres"
+    cover_url:
+      type: ["string", "null"]
+      format: uri
+      description: "Cover image URL"
+    summary:
+      type: ["string", "null"]
+      description: "Short game description"
+    sources:
+      type: array
+      items:
+        type: object
+        properties:
+          provider:
+            type: string
+            enum: ["igdb", "rawg", "steam"]
+          external_id:
+            type: string
+            description: "ID in the source system"
+          confidence:
+            type: number
+            minimum: 0
+            maximum: 1
+            description: "Match confidence score"
+    igdb_id:
+      type: ["string", "null"]
+      description: "IGDB game ID"
+    rawg_id:
+      type: ["string", "null"]
+      description: "RAWG game ID"
+    steam_app_id:
+      type: ["string", "null"]
+      description: "Steam App ID if available"
+
+# ============================================================
+# 4. API ENDPOINTS
+# ============================================================
+endpoints:
+  - path: GET /api/v1/games/search
+    summary: "Search for game candidates across data sources"
+    tags: ["disambiguation"]
+    security:
+      - cookieAuth: []
+    parameters:
+      - name: q
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 2
+          maxLength: 100
+        description: "Game title search query"
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 10
+          maximum: 20
+        description: "Maximum number of candidates to return"
+    responses:
+      "200":
+        description: "List of game candidates"
+        content:
+          application/json:
+            schema:
+              type: object
+              required: ["candidates", "total", "query"]
+              properties:
+                query:
+                  type: string
+                  description: "Original search query"
+                total:
+                  type: integer
+                  description: "Total candidates found"
+                candidates:
+                  type: array
+                  items:
+                    $ref: "#/candidate_schema"
+                sources_queried:
+                  type: array
+                  items:
+                    type: string
+                    enum: ["igdb", "rawg", "steam"]
+                  description: "Which sources were successfully queried"
+                latency_ms:
+                  type: integer
+                  description: "Total query latency in milliseconds"
+      "400":
+        description: "Invalid query parameters"
+        content:
+          application/json:
+            schema:
+              $ref: "#/error_schema"
+      "401":
+        description: "Unauthorized"
+      "429":
+        description: "Rate limit exceeded"
+        headers:
+          Retry-After:
+            schema:
+              type: integer
+            description: "Seconds until retry is allowed"
+      "500":
+        description: "Internal server error"
+        content:
+          application/json:
+            schema:
+              $ref: "#/error_schema"
+
+  - path: POST /api/v1/games/confirm
+    summary: "Confirm game selection and validate before pipeline"
+    tags: ["disambiguation"]
+    security:
+      - cookieAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: ["game_id", "source"]
+            properties:
+              game_id:
+                type: string
+                description: "Canonical game ID from candidate"
+              source:
+                type: string
+                enum: ["igdb", "rawg"]
+                description: "Primary source for this game"
+              confirmed_by:
+                type: string
+                format: uuid
+                description: "User ID who confirmed"
+    responses:
+      "200":
+        description: "Game confirmed, ready for pipeline"
+        content:
+          application/json:
+            schema:
+              type: object
+              required: ["confirmed_game", "can_run_pipeline"]
+              properties:
+                confirmed_game:
+                  $ref: "#/candidate_schema"
+                can_run_pipeline:
+                  type: boolean
+                  description: "Whether pipeline can be triggered"
+                pipeline_token:
+                  type: string
+                  description: "One-time token to authorize pipeline run"
+      "404":
+        description: "Game not found in candidates"
+      "409":
+        description: "Game already has a report in progress"
+
+  - path: POST /api/v1/pipeline/run
+    summary: "Trigger the analysis pipeline for a confirmed game"
+    tags: ["pipeline"]
+    security:
+      - cookieAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: ["game_id", "pipeline_token"]
+            properties:
+              game_id:
+                type: string
+              pipeline_token:
+                type: string
+              options:
+                type: object
+                properties:
+                  output_formats:
+                    type: array
+                    items:
+                      type: string
+                      enum: ["markdown", "pdf", "json"]
+                    default: ["markdown", "pdf", "json"]
+                  priority:
+                    type: string
+                    enum: ["normal", "high"]
+                    default: "normal"
+    responses:
+      "202":
+        description: "Pipeline accepted and queued"
+        content:
+          application/json:
+            schema:
+              type: object
+              required: ["pipeline_id", "status", "estimated_duration_seconds"]
+              properties:
+                pipeline_id:
+                  type: string
+                  format: uuid
+                status:
+                  type: string
+                  enum: ["queued", "running"]
+                estimated_duration_seconds:
+                  type: integer
+                  description: "Estimated pipeline duration"
+                queue_position:
+                  type: integer
+                  description: "Position in queue if queued"
+      "400":
+        description: "Invalid pipeline token or game_id"
+      "401":
+        description: "Invalid or expired pipeline token"
+      "409":
+        description: "Pipeline already running for this game"
+
+# ============================================================
+# 5. UI COMPONENT: DISAMBIGUATION MODAL
+# ============================================================
+ui_disambiguation:
+  trigger: "user submits search query"
+  layout: "modal_centered"
+  max_width: "672px"  # max-w-2xl
+  animation: "slide_up"
+
+  header:
+    back_button:
+      visible: true
+      text: "Back to Dashboard"
+      icon: "fa-arrow-left"
+      action: "close_modal"
+    title:
+      template: 'Searching for "{query}"...'
+      font_size: "xl"
+      font_weight: "bold"
+    subtitle:
+      text: "We found {count} matches. Please select the correct game to avoid homonym collisions:"
+      color: "text_muted"
+      font_size: "sm"
+
+  candidate_card:
+    layout: "horizontal"
+    padding: "16px"
+    border_radius: "12px"
+    background: "elevated"
+    border: "border"
+    hover:
+      border: "accent"
+      background: "accent/5"
+    selected_state:
+      border: "accent"
+      background: "accent/5"
+    elements:
+      - type: "thumbnail"
+        size: "64x64px"
+        shape: "rounded-lg"
+        fallback: "gradient_icon"
+        fallback_icon: "fa-gamepad"
+      - type: "info"
+        title:
+          font_size: "base"
+          font_weight: "semibold"
+          color: "text_primary"
+        metadata:
+          template: "{developer} · {year} · {genre}"
+          color: "text_muted"
+          font_size: "sm"
+        id_chip:
+          text: "igdb: {id}"
+          font_size: "xs"
+          color: "text_disabled"
+          background: "surface"
+          padding: "2px 6px"
+          border_radius: "4px"
+          font_family: "monospace"
+      - type: "radio"
+        size: "20px"
+        unchecked:
+          border: "2px solid border"
+          background: "transparent"
+        checked:
+          border: "2px solid accent"
+          background: "accent"
+          dot: "white"
+
+  footer:
+    help_text:
+      text: "Can't find your game?"
+      color: "text_muted"
+      font_size: "sm"
+    action_link:
+      text: "Search with different terms"
+      color: "accent"
+      hover: "accent_light"
+    primary_button:
+      text: "Run Pipeline"
+      style: "primary_accent"
+      disabled_state:
+        background: "text_disabled"
+        text: "text_disabled"
+        cursor: "not-allowed"
+      enabled_state:
+        background: "accent"
+        text: "white"
+        hover: "accent_dark"
+        shadow: "shadow-accent/25"
+
+# ============================================================
+# 6. PIPELINE STATUS POLLING
+# ============================================================
+pipeline_status:
+  endpoint: GET /api/v1/pipeline/{pipeline_id}/status
+  polling_interval_ms: 2000
+  max_polling_duration_seconds: 600  # 10 minutes
+
+  status_schema:
+    type: object
+    required: ["pipeline_id", "status", "phases"]
+    properties:
+      pipeline_id:
+        type: string
+      status:
+        type: string
+        enum: ["queued", "running", "completed", "failed", "cancelled"]
+      current_phase:
+        type: integer
+        minimum: 0
+        maximum: 4
+      phases:
+        type: array
+        items:
+          type: object
+          properties:
+            phase_id:
+              type: integer
+            name:
+              type: string
+              enum: ["disambiguation", "ingestion", "consolidation", "parallel_analysis", "synthesis"]
+            status:
+              type: string
+              enum: ["pending", "running", "completed", "failed"]
+            started_at:
+              type: string
+              format: date-time
+            completed_at:
+              type: ["string", "null"]
+              format: date-time
+            progress_percent:
+              type: integer
+              minimum: 0
+              maximum: 100
+      overall_progress_percent:
+        type: integer
+      estimated_completion:
+        type: string
+        format: date-time
+      error:
+        type: ["object", "null"]
+        properties:
+          code:
+            type: string
+          message:
+            type: string
+          phase:
+            type: string
+
+# ============================================================
+# 7. ERROR SCHEMA
+# ============================================================
+error_schema:
+  type: object
+  required: ["error_code", "message"]
+  properties:
+    error_code:
+      type: string
+    message:
+      type: string
+    details:
+      type: ["object", "null"]
+    phase:
+      type: ["string", "null"]
+      description: "Pipeline phase where error occurred"
+
+# ============================================================
+# 8. VALIDATION RULES
+# ============================================================
+validation:
+  search_query:
+    min_length: 2
+    max_length: 100
+    pattern: "^[a-zA-Z0-9\s\-_:.'()]+$"
+    forbidden_terms: ["script", "javascript", "<", ">", "{", "}"]
+
+  candidate_selection:
+    must_be_from_results: true
+    must_have_igdb_id: true
+    max_age_days: 7  # Candidates older than 7 days must be re-fetched
+
+  pipeline_token:
+    ttl_seconds: 300  # 5 minutes
+    one_time_use: true
+
+# ============================================================
+# 9. RATE LIMITS
+# ============================================================
+rate_limits:
+  search:
+    window: "1 minute"
+    max_requests: 10
+    per_user: true
+  pipeline_run:
+    window: "1 hour"
+    max_requests: 5
+    per_user: true

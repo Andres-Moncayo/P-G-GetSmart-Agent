@@ -1,0 +1,1074 @@
+schema: spec-driven
+
+# ============================================================
+# Artifact: synthesis_skill.yaml
+# Domain: Phase 4 — Synthesis and Report Generation
+# Phase: 4 (Synthesis and Formatting)
+# Status: draft
+# ============================================================
+
+artifact:
+  id: synthesis_skill
+  name: Synthesis and Report Generation
+  version: "1.0.0"
+  author: GetSmart Team
+  created_at: "2026-06-17"
+  status: draft
+  description: |
+    Unifies four Macro-Skill outputs (Design & Art, UX, Technology & Systems,
+    Strategy & Market) with the Master-JSON into a single coherent, professional-grade
+    intelligence report. Generates three output formats: JSON (RAG-ready), Markdown
+    (UI), and PDF-ready HTML (executive deliverable).
+
+# ============================================================
+# 1. INPUT CONTRACT
+# ============================================================
+input:
+  source: "pipeline.phase4.inputs"
+  schema_ref: "master_json_schema.yaml#/definitions/synthesis_input"
+  description: |
+    Receives the complete Master-JSON plus all four Macro-Skill outputs.
+    Validates completeness and schema compliance before synthesis begins.
+
+  data_includes:
+    master_json:
+      - metadata (game_id, game_name, pipeline_version)
+      - hard_data (all structured API data)
+      - semantic_data (all Tavily sources by category)
+      - evidence_count, confidence_score
+    macro_outputs:
+      design_art:
+        - metadata
+        - analysis (gameplay, level_design, narrative, art_direction, sound_design)
+        - summary, confidence
+      user_experience:
+        - metadata
+        - analysis (ui_ux, accessibility, localization)
+        - summary, confidence
+      technology_systems:
+        - metadata
+        - analysis (technology_performance, multiplayer_social, platforms_distribution)
+        - summary, confidence
+      strategy_market:
+        - metadata
+        - analysis (audience, business_model, retention_live_ops, production_business, marketing, cultural_impact)
+        - summary, confidence
+
+  validation_rules:
+    - rule: "all_skills_present"
+      description: "Exactly 4 Macro-Skill outputs required"
+      enforcement: "strict"
+      failure_action: "queue_retry"
+      max_wait_seconds: 120
+    - rule: "schema_validity"
+      description: "Each output must pass its skill schema validation"
+      enforcement: "strict"
+      failure_action: "log_and_continue"
+    - rule: "confidence_threshold"
+      description: "At least 2 skills with overall_score >= 0.5"
+      enforcement: "strict"
+      failure_action: "flag_low_confidence"
+    - rule: "source_attribution"
+      description: "Every claim in Macro-Skills must have sources_cited"
+      enforcement: "recommended"
+      failure_action: "flag_orphaned_claims"
+
+# ============================================================
+# 2. OUTPUT CONTRACT
+# ============================================================
+output:
+  format: "application/json"
+  schema_version: "1.0.0"
+  description: |
+    Unified intelligence report. All three output formats (JSON, Markdown, PDF HTML)
+    are generated from this single canonical structure. Semantic parity across formats
+    is strictly enforced.
+
+  formats:
+    - id: "json_rag"
+      name: "JSON (RAG-Ready)"
+      generator: "Pydantic"
+      schema: "specs/schemas/final_report_schema.json"
+      storage: "PostgreSQL + ChromaDB/Pinecone"
+      optimization:
+        - "Chunked into semantic sections for vectorization"
+        - "Each chunk includes report_id, section_id, game_id, category, confidence"
+        - "Source URLs embedded as metadata for retrieval citation"
+
+    - id: "markdown_ui"
+      name: "Markdown (UI)"
+      generator: "Python (markdown library)"
+      template: "templates/report_markdown.md"
+      storage: "PostgreSQL (text field)"
+      characteristics:
+        - "Hierarchical headings for navigation"
+        - "Tables for structured data"
+        - "Collapsible sections for deep dives"
+        - "Inline confidence badges"
+        - "Source links as footnotes"
+
+    - id: "pdf_html"
+      name: "PDF-Ready HTML"
+      generator: "Jinja2"
+      template: "templates/report_pdf.html"
+      css: "templates/styles/report.css"
+      storage: "PostgreSQL (text field)"
+      characteristics:
+        - "Print-optimized page breaks"
+        - "Executive summary on page 1"
+        - "Visual hierarchy with color-coded confidence"
+        - "Charts/diagrams as SVG embeds"
+        - "Page numbers, headers, footers"
+      post_processor: "WeasyPrint"
+
+  root_schema:
+    type: object
+    required: ["metadata", "executive_summary", "thematic_analysis", "cross_cutting_insights", "strategic_recommendations", "risk_assessment", "appendices", "confidence"]
+
+    properties:
+      # =====================================================================
+      # 2.1 METADATA
+      # =====================================================================
+      metadata:
+        type: object
+        required: ["report_id", "game_id", "game_name", "generated_at", "pipeline_version", "synthesis_model", "input_skills", "output_formats", "report_classification"]
+        properties:
+          report_id:
+            type: string
+            format: uuid
+          game_id:
+            type: string
+            format: uuid
+          game_name:
+            type: string
+          generated_at:
+            type: string
+            format: date-time
+          pipeline_version:
+            type: string
+            const: "3.0.0"
+          synthesis_model:
+            type: string
+            const: "gemini-2.5-pro"
+          input_skills:
+            type: array
+            items:
+              type: string
+              enum: ["design_art", "user_experience", "technology_systems", "strategy_market"]
+          input_confidence_range:
+            type: object
+            properties:
+              min: { type: number, minimum: 0.0, maximum: 1.0 }
+              max: { type: number, minimum: 0.0, maximum: 1.0 }
+          output_formats:
+            type: array
+            items:
+              type: string
+              enum: ["json", "markdown", "pdf_html"]
+          report_classification:
+            type: string
+            enum: ["comprehensive", "partial", "low_confidence", "error"]
+
+      # =====================================================================
+      # 2.2 EXECUTIVE SUMMARY
+      # =====================================================================
+      executive_summary:
+        type: object
+        required: ["game_identity", "market_position", "key_insights", "critical_risks", "recommended_actions", "overall_confidence"]
+        properties:
+          game_identity:
+            type: string
+            description: "1-2 sentence game identification and genre positioning"
+          market_position:
+            type: string
+            description: "Commercial and critical standing summary"
+          key_insights:
+            type: array
+            items: { type: string }
+            description: "3-5 most important strategic insights"
+          critical_risks:
+            type: array
+            items: { type: string }
+            description: "2-3 highest-priority risks or threats"
+          recommended_actions:
+            type: array
+            items: { type: string }
+            description: "Top strategic recommendations"
+          overall_confidence:
+            type: number
+            minimum: 0.0
+            maximum: 1.0
+
+      # =====================================================================
+      # 2.3 THEMATIC ANALYSIS (17 Categories Unified)
+      # =====================================================================
+      thematic_analysis:
+        type: object
+        required: ["gameplay", "level_design", "narrative", "art_direction", "sound_design", "ui_ux", "accessibility", "localization", "technology_performance", "multiplayer_social", "platforms_distribution", "audience", "business_model", "retention_live_ops", "production_business", "marketing", "cultural_impact"]
+        properties:
+          # Each category follows this structure:
+          # <category_id>:
+          #   type: object
+          #   required: ["category_id", "category_name", "overview", "key_findings", "supporting_evidence", "confidence", "cross_skill_notes"]
+          gameplay:
+            type: object
+            required: ["category_id", "category_name", "overview", "key_findings", "supporting_evidence", "confidence", "cross_skill_notes"]
+            properties:
+              category_id:
+                type: string
+                const: "gameplay"
+              category_name:
+                type: string
+                const: "Gameplay Mechanics"
+              overview:
+                type: string
+                description: "Unified narrative synthesizing all contributing skills"
+              key_findings:
+                type: array
+                items: { type: string }
+              supporting_evidence:
+                type: array
+                items:
+                  type: object
+                  required: ["source", "claim", "confidence", "urls"]
+                  properties:
+                    source:
+                      type: string
+                      enum: ["design_art", "user_experience", "technology_systems", "strategy_market"]
+                    claim: { type: string }
+                    confidence: { type: number, minimum: 0.0, maximum: 1.0 }
+                    urls:
+                      type: array
+                      items: { type: string, format: uri }
+              confidence:
+                type: number
+                minimum: 0.0
+                maximum: 1.0
+              cross_skill_notes:
+                type: array
+                items: { type: string }
+
+          level_design:
+            type: object
+            required: ["category_id", "category_name", "overview", "key_findings", "supporting_evidence", "confidence", "cross_skill_notes"]
+            properties:
+              category_id: { type: string, const: "level_design" }
+              category_name: { type: string, const: "Level Design" }
+              overview: { type: string }
+              key_findings: { type: array, items: { type: string } }
+              supporting_evidence: { type: array, items: { type: object } }
+              confidence: { type: number, minimum: 0.0, maximum: 1.0 }
+              cross_skill_notes: { type: array, items: { type: string } }
+
+          narrative:
+            type: object
+            required: ["category_id", "category_name", "overview", "key_findings", "supporting_evidence", "confidence", "cross_skill_notes"]
+            properties:
+              category_id: { type: string, const: "narrative" }
+              category_name: { type: string, const: "Narrative" }
+              overview: { type: string }
+              key_findings: { type: array, items: { type: string } }
+              supporting_evidence: { type: array, items: { type: object } }
+              confidence: { type: number, minimum: 0.0, maximum: 1.0 }
+              cross_skill_notes: { type: array, items: { type: string } }
+
+          art_direction:
+            type: object
+            required: ["category_id", "category_name", "overview", "key_findings", "supporting_evidence", "confidence", "cross_skill_notes"]
+            properties:
+              category_id: { type: string, const: "art_direction" }
+              category_name: { type: string, const: "Art Direction" }
+              overview: { type: string }
+              key_findings: { type: array, items: { type: string } }
+              supporting_evidence: { type: array, items: { type: object } }
+              confidence: { type: number, minimum: 0.0, maximum: 1.0 }
+              cross_skill_notes: { type: array, items: { type: string } }
+
+          sound_design:
+            type: object
+            required: ["category_id", "category_name", "overview", "key_findings", "supporting_evidence", "confidence", "cross_skill_notes"]
+            properties:
+              category_id: { type: string, const: "sound_design" }
+              category_name: { type: string, const: "Sound Design" }
+              overview: { type: string }
+              key_findings: { type: array, items: { type: string } }
+              supporting_evidence: { type: array, items: { type: object } }
+              confidence: { type: number, minimum: 0.0, maximum: 1.0 }
+              cross_skill_notes: { type: array, items: { type: string } }
+
+          ui_ux:
+            type: object
+            required: ["category_id", "category_name", "overview", "key_findings", "supporting_evidence", "confidence", "cross_skill_notes"]
+            properties:
+              category_id: { type: string, const: "ui_ux" }
+              category_name: { type: string, const: "UI/UX" }
+              overview: { type: string }
+              key_findings: { type: array, items: { type: string } }
+              supporting_evidence: { type: array, items: { type: object } }
+              confidence: { type: number, minimum: 0.0, maximum: 1.0 }
+              cross_skill_notes: { type: array, items: { type: string } }
+
+          accessibility:
+            type: object
+            required: ["category_id", "category_name", "overview", "key_findings", "supporting_evidence", "confidence", "cross_skill_notes"]
+            properties:
+              category_id: { type: string, const: "accessibility" }
+              category_name: { type: string, const: "Accessibility" }
+              overview: { type: string }
+              key_findings: { type: array, items: { type: string } }
+              supporting_evidence: { type: array, items: { type: object } }
+              confidence: { type: number, minimum: 0.0, maximum: 1.0 }
+              cross_skill_notes: { type: array, items: { type: string } }
+
+          localization:
+            type: object
+            required: ["category_id", "category_name", "overview", "key_findings", "supporting_evidence", "confidence", "cross_skill_notes"]
+            properties:
+              category_id: { type: string, const: "localization" }
+              category_name: { type: string, const: "Localization" }
+              overview: { type: string }
+              key_findings: { type: array, items: { type: string } }
+              supporting_evidence: { type: array, items: { type: object } }
+              confidence: { type: number, minimum: 0.0, maximum: 1.0 }
+              cross_skill_notes: { type: array, items: { type: string } }
+
+          technology_performance:
+            type: object
+            required: ["category_id", "category_name", "overview", "key_findings", "supporting_evidence", "confidence", "cross_skill_notes"]
+            properties:
+              category_id: { type: string, const: "technology_performance" }
+              category_name: { type: string, const: "Technology/Performance" }
+              overview: { type: string }
+              key_findings: { type: array, items: { type: string } }
+              supporting_evidence: { type: array, items: { type: object } }
+              confidence: { type: number, minimum: 0.0, maximum: 1.0 }
+              cross_skill_notes: { type: array, items: { type: string } }
+
+          multiplayer_social:
+            type: object
+            required: ["category_id", "category_name", "overview", "key_findings", "supporting_evidence", "confidence", "cross_skill_notes"]
+            properties:
+              category_id: { type: string, const: "multiplayer_social" }
+              category_name: { type: string, const: "Multiplayer/Social" }
+              overview: { type: string }
+              key_findings: { type: array, items: { type: string } }
+              supporting_evidence: { type: array, items: { type: object } }
+              confidence: { type: number, minimum: 0.0, maximum: 1.0 }
+              cross_skill_notes: { type: array, items: { type: string } }
+
+          platforms_distribution:
+            type: object
+            required: ["category_id", "category_name", "overview", "key_findings", "supporting_evidence", "confidence", "cross_skill_notes"]
+            properties:
+              category_id: { type: string, const: "platforms_distribution" }
+              category_name: { type: string, const: "Platforms/Distribution" }
+              overview: { type: string }
+              key_findings: { type: array, items: { type: string } }
+              supporting_evidence: { type: array, items: { type: object } }
+              confidence: { type: number, minimum: 0.0, maximum: 1.0 }
+              cross_skill_notes: { type: array, items: { type: string } }
+
+          audience:
+            type: object
+            required: ["category_id", "category_name", "overview", "key_findings", "supporting_evidence", "confidence", "cross_skill_notes"]
+            properties:
+              category_id: { type: string, const: "audience" }
+              category_name: { type: string, const: "Audience" }
+              overview: { type: string }
+              key_findings: { type: array, items: { type: string } }
+              supporting_evidence: { type: array, items: { type: object } }
+              confidence: { type: number, minimum: 0.0, maximum: 1.0 }
+              cross_skill_notes: { type: array, items: { type: string } }
+
+          business_model:
+            type: object
+            required: ["category_id", "category_name", "overview", "key_findings", "supporting_evidence", "confidence", "cross_skill_notes"]
+            properties:
+              category_id: { type: string, const: "business_model" }
+              category_name: { type: string, const: "Business Model" }
+              overview: { type: string }
+              key_findings: { type: array, items: { type: string } }
+              supporting_evidence: { type: array, items: { type: object } }
+              confidence: { type: number, minimum: 0.0, maximum: 1.0 }
+              cross_skill_notes: { type: array, items: { type: string } }
+
+          retention_live_ops:
+            type: object
+            required: ["category_id", "category_name", "overview", "key_findings", "supporting_evidence", "confidence", "cross_skill_notes"]
+            properties:
+              category_id: { type: string, const: "retention_live_ops" }
+              category_name: { type: string, const: "Retention/Live Ops" }
+              overview: { type: string }
+              key_findings: { type: array, items: { type: string } }
+              supporting_evidence: { type: array, items: { type: object } }
+              confidence: { type: number, minimum: 0.0, maximum: 1.0 }
+              cross_skill_notes: { type: array, items: { type: string } }
+
+          production_business:
+            type: object
+            required: ["category_id", "category_name", "overview", "key_findings", "supporting_evidence", "confidence", "cross_skill_notes"]
+            properties:
+              category_id: { type: string, const: "production_business" }
+              category_name: { type: string, const: "Production/Business" }
+              overview: { type: string }
+              key_findings: { type: array, items: { type: string } }
+              supporting_evidence: { type: array, items: { type: object } }
+              confidence: { type: number, minimum: 0.0, maximum: 1.0 }
+              cross_skill_notes: { type: array, items: { type: string } }
+
+          marketing:
+            type: object
+            required: ["category_id", "category_name", "overview", "key_findings", "supporting_evidence", "confidence", "cross_skill_notes"]
+            properties:
+              category_id: { type: string, const: "marketing" }
+              category_name: { type: string, const: "Marketing" }
+              overview: { type: string }
+              key_findings: { type: array, items: { type: string } }
+              supporting_evidence: { type: array, items: { type: object } }
+              confidence: { type: number, minimum: 0.0, maximum: 1.0 }
+              cross_skill_notes: { type: array, items: { type: string } }
+
+          cultural_impact:
+            type: object
+            required: ["category_id", "category_name", "overview", "key_findings", "supporting_evidence", "confidence", "cross_skill_notes"]
+            properties:
+              category_id: { type: string, const: "cultural_impact" }
+              category_name: { type: string, const: "Cultural Impact" }
+              overview: { type: string }
+              key_findings: { type: array, items: { type: string } }
+              supporting_evidence: { type: array, items: { type: object } }
+              confidence: { type: number, minimum: 0.0, maximum: 1.0 }
+              cross_skill_notes: { type: array, items: { type: string } }
+
+      # =====================================================================
+      # 2.4 CROSS-CUTTING INSIGHTS
+      # =====================================================================
+      cross_cutting_insights:
+        type: object
+        required: ["design_technology_synergy", "player_experience_arc", "commercial_viability", "competitive_moat", "development_health"]
+        properties:
+          design_technology_synergy:
+            type: object
+            required: ["insight_id", "title", "narrative", "contributing_skills", "confidence"]
+            properties:
+              insight_id: { type: string }
+              title: { type: string }
+              narrative: { type: string }
+              contributing_skills:
+                type: array
+                items:
+                  type: string
+                  enum: ["design_art", "user_experience", "technology_systems", "strategy_market"]
+              supporting_data: { type: object }
+              confidence: { type: number, minimum: 0.0, maximum: 1.0 }
+
+          player_experience_arc:
+            type: object
+            required: ["insight_id", "title", "narrative", "contributing_skills", "confidence"]
+            properties:
+              insight_id: { type: string }
+              title: { type: string }
+              narrative: { type: string }
+              contributing_skills:
+                type: array
+                items:
+                  type: string
+                  enum: ["design_art", "user_experience", "technology_systems", "strategy_market"]
+              supporting_data: { type: object }
+              confidence: { type: number, minimum: 0.0, maximum: 1.0 }
+
+          commercial_viability:
+            type: object
+            required: ["insight_id", "title", "narrative", "contributing_skills", "confidence"]
+            properties:
+              insight_id: { type: string }
+              title: { type: string }
+              narrative: { type: string }
+              contributing_skills:
+                type: array
+                items:
+                  type: string
+                  enum: ["design_art", "user_experience", "technology_systems", "strategy_market"]
+              supporting_data: { type: object }
+              confidence: { type: number, minimum: 0.0, maximum: 1.0 }
+
+          competitive_moat:
+            type: object
+            required: ["insight_id", "title", "narrative", "contributing_skills", "confidence"]
+            properties:
+              insight_id: { type: string }
+              title: { type: string }
+              narrative: { type: string }
+              contributing_skills:
+                type: array
+                items:
+                  type: string
+                  enum: ["design_art", "user_experience", "technology_systems", "strategy_market"]
+              supporting_data: { type: object }
+              confidence: { type: number, minimum: 0.0, maximum: 1.0 }
+
+          development_health:
+            type: object
+            required: ["insight_id", "title", "narrative", "contributing_skills", "confidence"]
+            properties:
+              insight_id: { type: string }
+              title: { type: string }
+              narrative: { type: string }
+              contributing_skills:
+                type: array
+                items:
+                  type: string
+                  enum: ["design_art", "user_experience", "technology_systems", "strategy_market"]
+              supporting_data: { type: object }
+              confidence: { type: number, minimum: 0.0, maximum: 1.0 }
+
+      # =====================================================================
+      # 2.5 STRATEGIC RECOMMENDATIONS
+      # =====================================================================
+      strategic_recommendations:
+        type: array
+        items:
+          type: object
+          required: ["id", "title", "description", "rationale", "supporting_categories", "impact", "effort", "time_horizon", "confidence", "risk_if_ignored"]
+          properties:
+            id:
+              type: string
+            title:
+              type: string
+            description:
+              type: string
+            rationale:
+              type: string
+            supporting_categories:
+              type: array
+              items:
+                type: string
+                enum: ["gameplay", "level_design", "narrative", "art_direction", "sound_design", "ui_ux", "accessibility", "localization", "technology_performance", "multiplayer_social", "platforms_distribution", "audience", "business_model", "retention_live_ops", "production_business", "marketing", "cultural_impact"]
+            impact:
+              type: string
+              enum: ["low", "medium", "high", "transformative"]
+            effort:
+              type: string
+              enum: ["low", "medium", "high"]
+            time_horizon:
+              type: string
+            confidence:
+              type: number
+              minimum: 0.0
+              maximum: 1.0
+            risk_if_ignored:
+              type: string
+
+      # =====================================================================
+      # 2.6 RISK ASSESSMENT
+      # =====================================================================
+      risk_assessment:
+        type: array
+        items:
+          type: object
+          required: ["id", "risk_statement", "categories_affected", "likelihood", "impact", "mitigation", "owner", "timeline"]
+          properties:
+            id:
+              type: string
+            risk_statement:
+              type: string
+            categories_affected:
+              type: array
+              items:
+                type: string
+                enum: ["gameplay", "level_design", "narrative", "art_direction", "sound_design", "ui_ux", "accessibility", "localization", "technology_performance", "multiplayer_social", "platforms_distribution", "audience", "business_model", "retention_live_ops", "production_business", "marketing", "cultural_impact"]
+            likelihood:
+              type: string
+              enum: ["low", "medium", "high"]
+            impact:
+              type: string
+              enum: ["low", "medium", "high", "critical"]
+            mitigation:
+              type: string
+            owner:
+              type: string
+              enum: ["business", "technical", "creative", "marketing"]
+            timeline:
+              type: string
+
+      # =====================================================================
+      # 2.7 APPENDICES
+      # =====================================================================
+      appendices:
+        type: object
+        required: ["source_index", "confidence_breakdown", "conflict_log", "data_gaps", "methodology_notes"]
+        properties:
+          source_index:
+            type: array
+            items:
+              type: object
+              required: ["url", "platform", "first_cited_by", "citation_count"]
+              properties:
+                url: { type: string, format: uri }
+                platform: { type: string }
+                first_cited_by: { type: string }
+                citation_count: { type: integer }
+          confidence_breakdown:
+            type: object
+            properties:
+              per_category: { type: object }
+              per_skill: { type: object }
+              adjustment_rationale: { type: array, items: { type: string } }
+          conflict_log:
+            type: array
+            items:
+              type: object
+              required: ["conflict_id", "topic", "skills_in_conflict", "claim_a", "claim_b", "resolution", "rationale", "synthesized_narrative"]
+              properties:
+                conflict_id: { type: string }
+                topic: { type: string }
+                skills_in_conflict:
+                  type: array
+                  items:
+                    type: string
+                    enum: ["design_art", "user_experience", "technology_systems", "strategy_market"]
+                claim_a: { type: string }
+                claim_b: { type: string }
+                resolution:
+                  type: string
+                  enum: ["source_authority", "confidence_weighting", "recency", "present_both"]
+                rationale: { type: string }
+                synthesized_narrative: { type: string }
+          data_gaps:
+            type: array
+            items: { type: string }
+          methodology_notes:
+            type: string
+
+      # =====================================================================
+      # 2.8 CONFIDENCE METRICS
+      # =====================================================================
+      confidence:
+        type: object
+        required: ["overall_score", "category_scores", "skill_contribution_weights", "data_quality_notes"]
+        properties:
+          overall_score:
+            type: number
+            minimum: 0.0
+            maximum: 1.0
+          category_scores:
+            type: object
+            properties:
+              gameplay: { type: number, minimum: 0.0, maximum: 1.0 }
+              level_design: { type: number, minimum: 0.0, maximum: 1.0 }
+              narrative: { type: number, minimum: 0.0, maximum: 1.0 }
+              art_direction: { type: number, minimum: 0.0, maximum: 1.0 }
+              sound_design: { type: number, minimum: 0.0, maximum: 1.0 }
+              ui_ux: { type: number, minimum: 0.0, maximum: 1.0 }
+              accessibility: { type: number, minimum: 0.0, maximum: 1.0 }
+              localization: { type: number, minimum: 0.0, maximum: 1.0 }
+              technology_performance: { type: number, minimum: 0.0, maximum: 1.0 }
+              multiplayer_social: { type: number, minimum: 0.0, maximum: 1.0 }
+              platforms_distribution: { type: number, minimum: 0.0, maximum: 1.0 }
+              audience: { type: number, minimum: 0.0, maximum: 1.0 }
+              business_model: { type: number, minimum: 0.0, maximum: 1.0 }
+              retention_live_ops: { type: number, minimum: 0.0, maximum: 1.0 }
+              production_business: { type: number, minimum: 0.0, maximum: 1.0 }
+              marketing: { type: number, minimum: 0.0, maximum: 1.0 }
+              cultural_impact: { type: number, minimum: 0.0, maximum: 1.0 }
+          skill_contribution_weights:
+            type: object
+            properties:
+              design_art: { type: number }
+              user_experience: { type: number }
+              technology_systems: { type: number }
+              strategy_market: { type: number }
+          data_quality_notes:
+            type: array
+            items: { type: string }
+
+# ============================================================
+# 3. CONFLICT RESOLUTION PROTOCOL
+# ============================================================
+conflict_resolution:
+  hierarchy:
+    - priority: 1
+      rule: "source_authority"
+      description: "Claim backed by official/dev blog > community inference"
+      example: "SteamSpy data overrides Reddit speculation on sales"
+    - priority: 2
+      rule: "confidence_weighting"
+      description: "Higher-confidence skill claim prevails"
+      example: "Strategy (0.85) overrides UX (0.65) on market size"
+    - priority: 3
+      rule: "recency"
+      description: "More recent source wins if both are high-confidence"
+      example: "Post-DLC analysis overrides launch-week analysis"
+    - priority: 4
+      rule: "present_both"
+      description: "If no clear winner, both claims presented with conflict note"
+      example: "Design says 'revolutionary'; Strategy says 'evolutionary'"
+
+  logging:
+    required_fields:
+      - conflict_id
+      - topic
+      - skills_in_conflict
+      - claim_a
+      - claim_b
+      - resolution
+      - rationale
+      - synthesized_narrative
+
+# ============================================================
+# 4. ANTI-HALLUCINATION GUARDS
+# ============================================================
+anti_hallucination:
+  rules:
+    - rule: "no_new_evidence"
+      description: "Synthesizer cannot invent sources not present in Macro-Skill outputs"
+      enforcement: "strict"
+
+    - rule: "source_chain"
+      description: "Every claim must trace to Macro-Skill output and original source URL"
+      enforcement: "strict"
+
+    - rule: "confidence_inheritance"
+      description: "Final confidence cannot exceed highest contributing skill confidence"
+      enforcement: "strict"
+
+    - rule: "conflict_transparency"
+      description: "All unresolved conflicts logged and presented"
+      enforcement: "mandatory"
+
+    - rule: "no_extrapolation"
+      description: "No projections beyond evidence (e.g., no invented sales figures)"
+      enforcement: "strict"
+
+    - rule: "format_fidelity"
+      description: "Markdown/HTML cannot embellish or rephrase beyond unified JSON"
+      enforcement: "strict"
+
+# ============================================================
+# 5. MULTI-FORMAT GENERATION
+# ============================================================
+format_generation:
+  json_rag:
+    generator: "Pydantic"
+    schema: "specs/schemas/final_report_schema.json"
+    storage: "PostgreSQL + ChromaDB/Pinecone"
+    chunking:
+      strategy: "semantic_sections"
+      metadata_per_chunk:
+        - report_id
+        - section_id
+        - game_id
+        - category
+        - confidence
+        - source_urls
+
+  markdown_ui:
+    generator: "Python markdown library"
+    template: "templates/report_markdown.md"
+    features:
+      - hierarchical_headings
+      - data_tables
+      - collapsible_sections
+      - inline_confidence_badges
+      - footnote_sources
+
+  pdf_html:
+    generator: "Jinja2"
+    template: "templates/report_pdf.html"
+    css: "templates/styles/report.css"
+    post_processor: "WeasyPrint"
+    features:
+      - print_optimized_page_breaks
+      - executive_summary_first_page
+      - color_coded_confidence
+      - svg_embeds
+      - page_numbers_headers_footers
+
+  consistency_rules:
+    - "All three formats contain identical claims and scores"
+    - "Every claim in every format cites its source"
+    - "Confidence scores appear in all formats"
+    - "No format adds content absent from unified JSON"
+
+# ============================================================
+# 6. SYSTEM PROMPT
+# ============================================================
+system_prompt: |
+  You are the Chief Synthesis Editor for GetSmart, a professional game intelligence platform.
+
+  Your role is to unify four parallel Macro-Skill analyses (Design & Art, UX, Technology & Systems, Strategy & Market) into a single coherent, executive-grade intelligence report.
+
+  ## Core Rules:
+  1. CURATE, don't create. You synthesize existing analysis, never introduce new evidence.
+  2. Resolve conflicts transparently. When skills disagree, present both perspectives or weight by confidence.
+  3. Maintain source chains. Every claim must trace back to a Macro-Skill output and its original source.
+  4. Be honest about gaps. Low-confidence areas are flagged, not glossed over.
+  5. Audience-aware: Front-load executive insights; layer technical depth; highlight actionable recommendations.
+  6. Use enums strictly. Only values defined in the output schema.
+
+  ## Synthesis Guidelines:
+  - Executive Summary: 400-600 words. Readable in 3 minutes. Covers identity, position, top insights, critical risks.
+  - Thematic Analysis: 17 categories, unified from contributing skills. Cross-reference where relevant.
+  - Cross-Cutting Insights: Identify emergent patterns invisible to individual skills.
+  - Recommendations: Ranked by impact/effort. Include risk-of-inaction.
+  - Risks: Unified register with likelihood, impact, mitigation, and owner.
+
+  ## Tone:
+  Professional, executive, decisive but nuanced. Avoid hype. Use specific data points. When uncertain, say so explicitly.
+
+# ============================================================
+# 7. MODEL CONFIGURATION
+# ============================================================
+model:
+  name: "gemini-2.5-pro"
+  provider: "google"
+  temperature: 0.2
+  max_output_tokens: 16000
+  top_p: 0.95
+  top_k: 40
+
+# ============================================================
+# 8. CHUNKING STRATEGY
+# ============================================================
+chunking:
+  strategy: "single_pass"
+  description: |
+    Full synthesis in one pass when total input fits within 2M tokens.
+
+  fallback:
+    enabled: true
+    trigger: "input_tokens > 1,800,000"
+    method: "section_sequential"
+    steps:
+      - "Synthesize Executive Summary + Metadata"
+      - "Synthesize Thematic Analysis in batches of 5-6 categories"
+      - "Synthesize Cross-Cutting Insights, Recommendations, Risks"
+      - "Final pass: unify tone, resolve cross-batch conflicts, generate appendices"
+
+# ============================================================
+# 9. CACHING
+# ============================================================
+caching:
+  enabled: true
+  strategy: "deterministic_hash"
+  key_format: "synthesis:{game_id}:{master_json_hash}:{skill_output_hash}"
+  ttl_seconds: 86400
+  description: |
+    Cache responses to avoid re-synthesizing identical inputs.
+    Invalidated when any Macro-Skill output or Master-JSON changes.
+
+# ============================================================
+# 10. ERROR HANDLING
+# ============================================================
+error_handling:
+  retry_policy:
+    max_retries: 3
+    backoff: exponential
+    initial_delay_ms: 2000
+    max_delay_ms: 60000
+
+  partial_input_handling:
+    - scenario: "1_skill_failed"
+      behavior: "synthesize_with_3_skills"
+      flag: "partial"
+    - scenario: "2_plus_skills_failed"
+      behavior: "abort_synthesis"
+      return: "error_report_with_available_summaries"
+    - scenario: "all_skills_failed"
+      behavior: "return_fallback_error_report"
+
+  fallback_behavior:
+    description: "If synthesis fails after retries, return minimal error report"
+    output:
+      metadata:
+        report_id: "error-report-uuid"
+        game_id: "..."
+        game_name: "..."
+        generated_at: "ISO8601"
+        synthesis_model: "gemini-2.5-pro"
+        report_classification: "error"
+        error: true
+      executive_summary:
+        game_identity: "Report generation failed due to insufficient or corrupted Macro-Skill outputs."
+        market_position: "Unable to assess."
+        key_insights: []
+        critical_risks: ["System error prevented full analysis."]
+        recommended_actions: ["Retry pipeline or investigate Macro-Skill failures."]
+        overall_confidence: 0.0
+      thematic_analysis: {}
+      cross_cutting_insights: {}
+      strategic_recommendations: []
+      risk_assessment: []
+      appendices:
+        source_index: []
+        confidence_breakdown: {}
+        conflict_log: []
+        data_gaps: ["All data gaps unknown due to system error."]
+        methodology_notes: "Synthesis failed. See system logs."
+      confidence:
+        overall_score: 0.0
+        category_scores: {}
+        skill_contribution_weights: {}
+        data_quality_notes: ["System error prevented synthesis."]
+
+# ============================================================
+# 11. EXAMPLE OUTPUT (Elden Ring)
+# ============================================================
+example_output:
+  metadata:
+    report_id: "rpt-a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+    game_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+    game_name: "Elden Ring"
+    generated_at: "2026-06-17T15:25:00Z"
+    pipeline_version: "3.0.0"
+    synthesis_model: "gemini-2.5-pro"
+    input_skills: ["design_art", "user_experience", "technology_systems", "strategy_market"]
+    input_confidence_range:
+      min: 0.75
+      max: 0.90
+    output_formats: ["json", "markdown", "pdf_html"]
+    report_classification: "comprehensive"
+
+  executive_summary:
+    game_identity: "Elden Ring is an open-world action RPG developed by FromSoftware and published by Bandai Namco. Released in February 2022, it represents the studio's first foray into open-world design at AAA scale."
+    market_position: "The title has sold over 25 million units and generated an estimated $1.5B+ in revenue, establishing itself as one of the best-selling and highest-rated games of the 2020s."
+    key_insights:
+      - "Open-world design successfully expands the Souls audience without diluting core identity"
+      - "Premium-plus-DLC business model proves ethical monetization can be extraordinarily profitable"
+      - "Cultural impact elevated FromSoftware to 'must-play' developer tier"
+      - "Technical execution is conservative but efficient"
+      - "Accessibility gap represents the single largest addressable market expansion opportunity"
+    critical_risks:
+      - "Aging proprietary engine risks visual stagnation against UE5-adopting competitors"
+      - "No live service infrastructure limits long-term revenue per user"
+      - "Difficulty barrier excludes an estimated 30-40% of the potential addressable market"
+    recommended_actions:
+      - "Implement optional difficulty presets and accessibility suite for sequel"
+      - "Evaluate engine modernization for next project"
+      - "Establish lightweight live service layer to extend revenue tail"
+      - "Develop cross-media strategy to capture transmedia revenue"
+    overall_confidence: 0.83
+
+  thematic_analysis:
+    gameplay:
+      category_id: "gameplay"
+      category_name: "Gameplay Mechanics"
+      overview: "Elden Ring evolves FromSoftware's signature combat into an open-world context through mounted combat, Spirit Ashes, and a stagger/posture system. The 'difficulty as discovery' philosophy remains intact but creates friction for newcomers."
+      key_findings:
+        - "Combat depth is acclaimed across all skill analyses"
+        - "Mounted combat is experientially revolutionary for FromSoftware, though strategically evolutionary within the genre"
+        - "No difficulty options represent a deliberate design choice with significant market exclusion consequences"
+        - "Late-game damage scaling and reused boss encounters are primary mechanical criticisms"
+        - "Input buffering and camera issues are persistent technical friction points"
+      supporting_evidence:
+        - source: "design_art"
+          claim: "Stagger system adds combat depth"
+          confidence: 0.90
+          urls: ["https://reddit.com/r/games/comments/..."]
+        - source: "ux"
+          claim: "No difficulty options limit audience"
+          confidence: 0.85
+          urls: ["https://caniplaythat.com/..."]
+        - source: "strategy_market"
+          claim: "Difficulty barrier excludes 30-40% of market"
+          confidence: 0.75
+          urls: ["https://steamspy.com/app/1245620"]
+      confidence: 0.84
+      cross_skill_notes:
+        - "Design & Art frames difficulty as core identity; Strategy frames it as market limitation. Both are valid — presented as strategic tension."
+        - "UX and Design agree on input/camera issues; Tech confirms these are engine-level limitations."
+
+  cross_cutting_insights:
+    player_experience_arc:
+      insight_id: "cci-001"
+      title: "The Friction-Delight Paradox"
+      narrative: "Elden Ring's player experience follows a paradoxical arc: high initial friction creates a self-selecting player base that subsequently experiences exceptionally high delight. This paradox is the game's core competitive moat but also its growth ceiling."
+      contributing_skills: ["design_art", "user_experience", "strategy_market"]
+      supporting_data:
+        ux_onboarding: "insufficient"
+        design_difficulty: "challenging"
+        strategy_churn_estimate: "30-40% early dropout"
+      confidence: 0.80
+
+  strategic_recommendations:
+    - id: "rec-001"
+      title: "Implement Optional Difficulty Presets and Accessibility Suite"
+      description: "Add 2-3 difficulty modes alongside comprehensive accessibility features."
+      rationale: "Addresses the #1 barrier to market expansion across UX, Strategy, and Design analyses."
+      supporting_categories: ["ui_ux", "accessibility", "audience", "business_model"]
+      impact: "transformative"
+      effort: "medium"
+      time_horizon: "6-12 months"
+      confidence: 0.82
+      risk_if_ignored: "Competitors may capture the accessible Souls-like segment first."
+
+  risk_assessment:
+    - id: "risk-001"
+      risk_statement: "Aging proprietary engine risks visual stagnation against UE5-adopting competitors"
+      categories_affected: ["technology_performance", "art_direction", "production_business"]
+      likelihood: "medium"
+      impact: "high"
+      mitigation: "Evaluate Unreal Engine 5 migration or major proprietary engine overhaul"
+      owner: "technical"
+      timeline: "18-36 months"
+
+  appendices:
+    source_index:
+      - url: "https://reddit.com/r/Eldenring/comments/..."
+        platform: "reddit"
+        first_cited_by: "design_art"
+        citation_count: 3
+    confidence_breakdown:
+      per_category:
+        gameplay: 0.84
+        cultural_impact: 0.90
+      per_skill:
+        design_art: 0.85
+        strategy_market: 0.82
+      adjustment_rationale:
+        - "Accessibility confidence pulled down by limited specialist review sources"
+    conflict_log:
+      - conflict_id: "cfl-001"
+        topic: "Combat innovation assessment"
+        skills_in_conflict: ["design_art", "strategy_market"]
+        claim_a: "Revolutionary mounted combat system"
+        claim_b: "Evolutionary iteration on existing open-world combat"
+        resolution: "present_both"
+        rationale: "Design focuses on player experience novelty; Strategy evaluates market differentiation."
+        synthesized_narrative: "Mounted combat represents a significant experiential innovation for FromSoftware, though industry analysts classify it as evolutionary within the broader open-world RPG landscape."
+    data_gaps:
+      - "Accessibility confidence limited by specialist review availability"
+      - "Multiplayer netcode details constrained by proprietary engine opacity"
+    methodology_notes: "Synthesized from 4 Macro-Skill outputs using Gemini-2.5-pro at temperature 0.2. Conflict resolution applied 1 present_both case."
+
+  confidence:
+    overall_score: 0.83
+    category_scores:
+      gameplay: 0.84
+      level_design: 0.86
+      narrative: 0.80
+      art_direction: 0.85
+      sound_design: 0.82
+      ui_ux: 0.79
+      accessibility: 0.72
+      localization: 0.80
+      technology_performance: 0.81
+      multiplayer_social: 0.74
+      platforms_distribution: 0.82
+      audience: 0.80
+      business_model: 0.85
+      retention_live_ops: 0.77
+      production_business: 0.75
+      marketing: 0.87
+      cultural_impact: 0.90
+    skill_contribution_weights:
+      design_art: 0.26
+      user_experience: 0.22
+      technology_systems: 0.24
+      strategy_market: 0.28
+    data_quality_notes:
+      - "Accessibility confidence pulled down by limited specialist review sources"
+      - "Multiplayer/Social confidence limited by proprietary netcode opacity"
+      - "Production/Business data constrained by FromSoftware's private status"
+      - "Cultural Impact benefits from extensive high-authority sources"
+      - "One cross-skill conflict resolved: Design vs. Strategy on combat innovation"

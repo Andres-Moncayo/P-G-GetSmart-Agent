@@ -1,0 +1,743 @@
+schema: spec-driven
+
+# ============================================================
+# Artifact: ui_login_contract.yaml
+# Domain: UI & Authentication
+# Phase: Phase 0 (Disambiguation) — Pre-pipeline
+# Status: draft
+# ============================================================
+
+artifact:
+  id: ui_login_contract
+  name: UI & Login Contract
+  version: "1.0.0"
+  author: GetSmart Team
+  created_at: "2026-06-17"
+  status: draft
+  description: |
+    Defines the authentication, navigation, and user profile contracts
+    for the GetSmart frontend. Covers SSO login, session management,
+    topbar navigation, and profile modal interactions.
+
+# ============================================================
+# 1. DESIGN SYSTEM REFERENCE
+# ============================================================
+design_system:
+  name: "Globant Enterprise Dark Mode — Game Library Edition"
+  tokens:
+    colors:
+      bg: "#0A0A0A"
+      surface: "#161616"
+      elevated: "#1C1C1C"
+      hover: "#222222"
+      border: "#2A2A2A"
+      border_hover: "#3A3A3A"
+      accent: "#3B82F6"
+      accent_light: "#60A5FA"
+      accent_dark: "#2563EB"
+      accent_glow: "rgba(59,130,246,0.15)"
+      secondary: "#8B5CF6"
+      secondary_light: "#A78BFA"
+      text_primary: "#F5F5F5"
+      text_secondary: "#A3A3A3"
+      text_muted: "#737373"
+      text_disabled: "#525252"
+      success: "#22C55E"
+      warning: "#EAB308"
+      danger: "#EF4444"
+    typography:
+      family: "Inter, system-ui, sans-serif"
+      sizes:
+        xs: "0.75rem"
+        sm: "0.875rem"
+        base: "1rem"
+        lg: "1.125rem"
+        xl: "1.25rem"
+        "2xl": "1.5rem"
+        "3xl": "1.875rem"
+    spacing:
+      xs: "0.25rem"
+      sm: "0.5rem"
+      md: "1rem"
+      lg: "1.5rem"
+      xl: "2rem"
+      "2xl": "2.5rem"
+    radius:
+      sm: "8px"
+      md: "10px"
+      lg: "12px"
+      xl: "14px"
+      full: "9999px"
+    effects:
+      glass: "backdrop-blur(20px)"
+      glow_border: "0 0 0 1px #2A2A2A, 0 0 20px rgba(59,130,246,0.08)"
+      glow_border_hover: "0 0 0 1px #3B82F6, 0 0 30px rgba(59,130,246,0.15)"
+      shadow_card: "0 4px 24px rgba(0,0,0,0.4)"
+      shadow_modal: "0 24px 48px rgba(0,0,0,0.6)"
+    animations:
+      fade_in: "0.4s ease-out"
+      slide_up: "0.3s ease-out"
+      pulse_dot: "2s ease-in-out infinite"
+      card_hover: "0.5s cubic-bezier(0.4,0,0.2,1)"
+
+# ============================================================
+# 2. AUTHENTICATION CONTRACT
+# ============================================================
+auth:
+  # ---- SSO Providers ----
+  sso_providers:
+    - id: google
+      name: "Google"
+      type: "oauth2"
+      icon: "fab fa-google"
+      icon_color: "#4285F4"
+      authorization_endpoint: "https://accounts.google.com/o/oauth2/v2/auth"
+      token_endpoint: "https://oauth2.googleapis.com/token"
+      scopes: ["openid", "email", "profile"]
+      client_id_env: "GOOGLE_CLIENT_ID"
+      client_secret_env: "GOOGLE_CLIENT_SECRET"
+      redirect_uri: "/auth/google/callback"
+
+    - id: microsoft
+      name: "Microsoft"
+      type: "oauth2"
+      icon: "fab fa-microsoft"
+      icon_color: "#00A4EF"
+      authorization_endpoint: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+      token_endpoint: "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+      scopes: ["openid", "email", "profile", "User.Read"]
+      client_id_env: "MICROSOFT_CLIENT_ID"
+      client_secret_env: "MICROSOFT_CLIENT_SECRET"
+      redirect_uri: "/auth/microsoft/callback"
+
+    - id: okta
+      name: "Okta"
+      type: "oauth2"
+      icon: "fas fa-shield-alt"
+      icon_color: "#007DC1"
+      authorization_endpoint: "${OKTA_DOMAIN}/oauth2/default/v1/authorize"
+      token_endpoint: "${OKTA_DOMAIN}/oauth2/default/v1/token"
+      scopes: ["openid", "email", "profile"]
+      client_id_env: "OKTA_CLIENT_ID"
+      client_secret_env: "OKTA_CLIENT_SECRET"
+      redirect_uri: "/auth/okta/callback"
+
+  # ---- Demo Account ----
+  demo_account:
+    enabled: true
+    button_text: "Sign in with demo account"
+    button_style: "primary_accent"
+    generates_token: true
+    token_ttl_seconds: 86400
+    user_profile:
+      email: "demo@getsmart.dev"
+      name: "Demo User"
+      role: "viewer"
+      avatar_initials: "DU"
+
+  # ---- Session Management ----
+  session:
+    token_storage: "httpOnly_cookie"
+    refresh_token_storage: "httpOnly_cookie"
+    access_token_ttl: 3600          # 1 hour
+    refresh_token_ttl: 604800       # 7 days
+    idle_timeout: 1800              # 30 minutes
+    absolute_timeout: 28800         # 8 hours
+    remember_me_ttl: 2592000        # 30 days
+
+  # ---- JWT Claims ----
+  jwt:
+    algorithm: "RS256"
+    issuer: "getsmart-api"
+    audience: "getsmart-frontend"
+    required_claims:
+      - sub        # user_id
+      - email
+      - name
+      - role
+      - iat
+      - exp
+      - iss
+      - aud
+
+# ============================================================
+# 3. USER PROFILE SCHEMA
+# ============================================================
+user_profile_schema:
+  $id: "https://getsmart.dev/schemas/v1/user-profile"
+  type: object
+  required: ["id", "email", "name", "role", "created_at"]
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: "Unique user identifier"
+    email:
+      type: string
+      format: email
+      description: "User email address"
+    name:
+      type: string
+      description: "Display name"
+    first_name:
+      type: string
+      description: "First name"
+    last_name:
+      type: string
+      description: "Last name"
+    role:
+      type: string
+      enum: ["admin", "editor", "viewer", "demo"]
+      description: "User role and permissions level"
+    avatar_url:
+      type: ["string", "null"]
+      format: uri
+      description: "URL to avatar image"
+    avatar_initials:
+      type: string
+      maxLength: 2
+      description: "Fallback initials for avatar"
+    department:
+      type: ["string", "null"]
+      description: "User department or team"
+    sso_provider:
+      type: ["string", "null"]
+      enum: ["google", "microsoft", "okta", "demo"]
+      description: "SSO provider used for login"
+    preferences:
+      type: object
+      properties:
+        theme:
+          type: string
+          enum: ["dark", "light", "system"]
+          default: "dark"
+        language:
+          type: string
+          enum: ["en", "es"]
+          default: "en"
+        notifications_email:
+          type: boolean
+          default: true
+        notifications_push:
+          type: boolean
+          default: false
+    api_keys:
+      type: array
+      items:
+        type: object
+        properties:
+          id:
+            type: string
+          name:
+            type: string
+          prefix:
+            type: string
+            description: "First 8 chars of the key"
+          created_at:
+            type: string
+            format: date-time
+          last_used_at:
+            type: ["string", "null"]
+            format: date-time
+          scopes:
+            type: array
+            items:
+              type: string
+              enum: ["read", "write", "admin"]
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+    last_login_at:
+      type: string
+      format: date-time
+
+# ============================================================
+# 4. API ENDPOINTS
+# ============================================================
+endpoints:
+  # ---- Authentication ----
+  - path: POST /api/v1/auth/login/{provider}
+    summary: "Initiate SSO login flow"
+    tags: ["auth"]
+    parameters:
+      - name: provider
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: ["google", "microsoft", "okta", "demo"]
+    responses:
+      "200":
+        description: "Redirect URL for SSO provider"
+        content:
+          application/json:
+            schema:
+              type: object
+              required: ["redirect_url"]
+              properties:
+                redirect_url:
+                  type: string
+                  format: uri
+      "400":
+        description: "Invalid provider"
+      "500":
+        description: "SSO configuration error"
+
+  - path: GET /api/v1/auth/callback/{provider}
+    summary: "Handle SSO callback and create session"
+    tags: ["auth"]
+    parameters:
+      - name: provider
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: ["google", "microsoft", "okta"]
+      - name: code
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: state
+        in: query
+        required: true
+        schema:
+          type: string
+    responses:
+      "302":
+        description: "Redirect to dashboard with session cookies set"
+        headers:
+          Set-Cookie:
+            schema:
+              type: string
+            description: "access_token and refresh_token httpOnly cookies"
+      "401":
+        description: "Invalid authorization code"
+      "500":
+        description: "Token exchange failed"
+
+  - path: POST /api/v1/auth/logout
+    summary: "Invalidate session and clear cookies"
+    tags: ["auth"]
+    security:
+      - cookieAuth: []
+    responses:
+      "200":
+        description: "Session terminated"
+        headers:
+          Set-Cookie:
+            schema:
+              type: string
+            description: "Cleared access_token and refresh_token cookies"
+
+  - path: POST /api/v1/auth/refresh
+    summary: "Refresh access token using refresh token"
+    tags: ["auth"]
+    security:
+      - cookieAuth: []
+    responses:
+      "200":
+        description: "New access token issued"
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                access_token:
+                  type: string
+                expires_in:
+                  type: integer
+      "401":
+        description: "Invalid or expired refresh token"
+
+  # ---- User Profile ----
+  - path: GET /api/v1/me
+    summary: "Get current user profile"
+    tags: ["profile"]
+    security:
+      - cookieAuth: []
+    responses:
+      "200":
+        description: "User profile"
+        content:
+          application/json:
+            schema:
+              $ref: "#/user_profile_schema"
+      "401":
+        description: "Unauthorized"
+
+  - path: PATCH /api/v1/me
+    summary: "Update user profile"
+    tags: ["profile"]
+    security:
+      - cookieAuth: []
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              name:
+                type: string
+              preferences:
+                type: object
+    responses:
+      "200":
+        description: "Profile updated"
+      "400":
+        description: "Invalid fields"
+      "401":
+        description: "Unauthorized"
+
+  - path: GET /api/v1/me/api-keys
+    summary: "List user's API keys"
+    tags: ["profile"]
+    security:
+      - cookieAuth: []
+    responses:
+      "200":
+        description: "List of API keys (without full key values)"
+
+  - path: POST /api/v1/me/api-keys
+    summary: "Generate new API key"
+    tags: ["profile"]
+    security:
+      - cookieAuth: []
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+            required: ["name"]
+            properties:
+              name:
+                type: string
+              scopes:
+                type: array
+                items:
+                  type: string
+                  enum: ["read", "write", "admin"]
+    responses:
+      "201":
+        description: "API key created (full key returned once)"
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                name:
+                  type: string
+                key:
+                  type: string
+                  description: "Full API key (shown only once)"
+                prefix:
+                  type: string
+                created_at:
+                  type: string
+                  format: date-time
+
+  - path: DELETE /api/v1/me/api-keys/{key_id}
+    summary: "Revoke API key"
+    tags: ["profile"]
+    security:
+      - cookieAuth: []
+    parameters:
+      - name: key_id
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: "API key revoked"
+      "404":
+        description: "API key not found"
+
+# ============================================================
+# 5. UI COMPONENTS SPECIFICATION
+# ============================================================
+components:
+  # ---- Login Screen ----
+  login_screen:
+    layout: "centered_card"
+    background:
+      type: "gradient_radial"
+      colors: ["rgba(59,130,246,0.08)", "transparent"]
+      position: "50% 40%"
+      size: "80% 60%"
+      pattern: "grid_dots"
+      pattern_color: "#2A2A2A"
+      pattern_size: "40px"
+    card:
+      max_width: "400px"
+      padding: "24px"
+    elements:
+      - type: "logo"
+        size: "64x64px"
+        shape: "rounded-2xl"
+        gradient: "accent_to_secondary"
+        icon: "fa-gamepad"
+      - type: "title"
+        text: "GetSmart"
+        accent: "Smart"
+        accent_color: "accent"
+        font_size: "3xl"
+        font_weight: "bold"
+      - type: "subtitle"
+        text: "Game Intelligence Library"
+        color: "text_muted"
+        font_size: "sm"
+      - type: "sso_buttons"
+        gap: "12px"
+        button_style: "surface_with_border"
+        hover: "border_hover"
+        icon_size: "20px"
+        text_style: "font-medium text-sm"
+      - type: "divider"
+        text: "or"
+        color: "text_muted"
+      - type: "demo_button"
+        text: "Sign in with demo account"
+        style: "primary_accent"
+        full_width: true
+        shadow: "shadow-accent/25"
+      - type: "footer_text"
+        text: "By signing in, you agree to our Terms and Privacy Policy"
+        color: "text_muted"
+        font_size: "xs"
+
+  # ---- Topbar ----
+  topbar:
+    position: "sticky"
+    top: "0"
+    z_index: 40
+    height: "64px"
+    background: "glass"
+    border_bottom: "border"
+    blur: "20px"
+    layout: "flex_between"
+    left_section:
+      - type: "logo"
+        size: "32x32px"
+        shape: "rounded-lg"
+      - type: "brand_name"
+        text: "GetSmart"
+        accent: "Smart"
+        accent_color: "accent"
+        font_size: "lg"
+        font_weight: "bold"
+      - type: "nav_links"
+        items:
+          - label: "Reports"
+            path: "/reports"
+            active_style: "bg-elevated text-primary"
+            inactive_style: "text-muted hover:text-primary hover:bg-elevated"
+          - label: "Pipeline"
+            path: "/pipeline"
+            inactive_style: "text-muted hover:text-primary hover:bg-elevated"
+          - label: "Templates"
+            path: "/templates"
+            inactive_style: "text-muted hover:text-primary hover:bg-elevated"
+          - label: "Docs"
+            path: "/docs"
+            inactive_style: "text-muted hover:text-primary hover:bg-elevated"
+    right_section:
+      - type: "icon_button"
+        icon: "fa-search"
+        size: "36x36px"
+        style: "surface_border"
+      - type: "icon_button"
+        icon: "fa-bell"
+        size: "36x36px"
+        style: "surface_border"
+        badge:
+          type: "dot"
+          color: "accent"
+          animation: "pulse_dot"
+      - type: "profile_trigger"
+        avatar:
+          size: "28x28px"
+          shape: "rounded-full"
+          gradient: "accent_to_secondary"
+          initials: "AL"
+          text_color: "white"
+        name:
+          text: "Alejandro"
+          style: "text-sm font-medium text-secondary hidden-sm"
+        chevron:
+          icon: "fa-chevron-down"
+          size: "xs"
+          color: "text_muted"
+
+  # ---- Profile Modal ----
+  profile_modal:
+    trigger: "click_profile_trigger"
+    position: "absolute"
+    top: "64px"
+    right: "24px"
+    width: "288px"
+    shape: "rounded-2xl"
+    background: "surface"
+    border: "border"
+    shadow: "shadow-2xl"
+    animation: "slide_up"
+    sections:
+      - type: "user_header"
+        avatar:
+          size: "48x48px"
+          shape: "rounded-full"
+          gradient: "accent_to_secondary"
+          initials: "AL"
+          text_size: "lg"
+          text_weight: "bold"
+        name:
+          text: "Alejandro L."
+          style: "font-semibold text-primary"
+        email:
+          text: "alejandro.l@globant.com"
+          style: "text-xs text-muted"
+        role_badge:
+          text: "Senior AI Engineer · Enterprise"
+          style: "text-xs text-muted bg-elevated border border-border rounded-lg px-3 py-1.5"
+      - type: "menu_items"
+        items:
+          - icon: "fa-user-edit"
+            label: "Edit profile"
+            style: "text-secondary hover:text-primary hover:bg-elevated"
+          - icon: "fa-shield-alt"
+            label: "Security & SSO"
+            style: "text-secondary hover:text-primary hover:bg-elevated"
+          - icon: "fa-sliders-h"
+            label: "Preferences"
+            style: "text-secondary hover:text-primary hover:bg-elevated"
+          - icon: "fa-key"
+            label: "API Keys"
+            style: "text-secondary hover:text-primary hover:bg-elevated"
+      - type: "divider"
+        style: "border-t border-border my-2"
+      - type: "menu_items"
+        items:
+          - icon: "fa-question-circle"
+            label: "Help & Support"
+            style: "text-secondary hover:text-primary hover:bg-elevated"
+          - icon: "fa-sign-out-alt"
+            label: "Sign out"
+            style: "text-danger hover:bg-danger/10"
+            action: "logout"
+
+# ============================================================
+# 6. STATE MANAGEMENT
+# ============================================================
+state:
+  auth_store:
+    library: "zustand"
+    persist: "localStorage"
+    fields:
+      - name: "user"
+        type: "UserProfile | null"
+        description: "Current authenticated user"
+      - name: "isAuthenticated"
+        type: "boolean"
+        default: false
+      - name: "isLoading"
+        type: "boolean"
+        default: false
+      - name: "error"
+        type: "string | null"
+        default: null
+    actions:
+      - name: "login"
+        parameters: ["provider: string"]
+        description: "Redirect to SSO provider"
+      - name: "logout"
+        description: "Clear session and state"
+      - name: "setUser"
+        parameters: ["user: UserProfile"]
+      - name: "clearError"
+        description: "Clear error state"
+
+  ui_store:
+    library: "zustand"
+    persist: "none"
+    fields:
+      - name: "profileModalOpen"
+        type: "boolean"
+        default: false
+      - name: "activeNavItem"
+        type: "string"
+        default: "reports"
+    actions:
+      - name: "toggleProfileModal"
+      - name: "setActiveNavItem"
+        parameters: ["item: string"]
+
+# ============================================================
+# 7. ERROR HANDLING
+# ============================================================
+errors:
+  auth_errors:
+    - code: "AUTH_001"
+      message: "Invalid SSO provider"
+      http_status: 400
+      user_message: "Authentication provider not supported"
+
+    - code: "AUTH_002"
+      message: "Invalid authorization code"
+      http_status: 401
+      user_message: "Authentication failed. Please try again."
+
+    - code: "AUTH_003"
+      message: "Session expired"
+      http_status: 401
+      user_message: "Your session has expired. Please sign in again."
+      action: "redirect_to_login"
+
+    - code: "AUTH_004"
+      message: "SSO configuration error"
+      http_status: 500
+      user_message: "Authentication service unavailable. Please try again later."
+
+    - code: "AUTH_005"
+      message: "Token refresh failed"
+      http_status: 401
+      user_message: "Unable to refresh session. Please sign in again."
+      action: "redirect_to_login"
+
+# ============================================================
+# 8. SECURITY REQUIREMENTS
+# ============================================================
+security:
+  cors:
+    allow_origins: ["http://localhost:5173", "https://getsmart.dev"]
+    allow_methods: ["GET", "POST", "PATCH", "DELETE"]
+    allow_headers: ["Content-Type", "Authorization"]
+    allow_credentials: true
+
+  cookies:
+    access_token:
+      httpOnly: true
+      secure: true
+      sameSite: "strict"
+      maxAge: 3600
+    refresh_token:
+      httpOnly: true
+      secure: true
+      sameSite: "strict"
+      maxAge: 604800
+      path: "/api/v1/auth/refresh"
+
+  csrf:
+    enabled: true
+    token_header: "X-CSRF-Token"
+    cookie_name: "csrf_token"
+
+  rate_limiting:
+    login_attempts:
+      window: "15 minutes"
+      max_requests: 5
+      block_duration: "30 minutes"

@@ -1,0 +1,1109 @@
+schema: spec-driven
+
+# ============================================================
+# Artifact: master_json_schema.yaml
+# Domain: Master-JSON Data Structure
+# Phase: 2 (Consolidation)
+# Status: draft
+# ============================================================
+
+artifact:
+  id: master_json_schema
+  name: Master-JSON Schema
+  version: "1.0.0"
+  author: GetSmart Team
+  created_at: "2026-06-17"
+  status: draft
+  description: |
+    Defines the Master-JSON (Super-JSON) data structure that consolidates the
+    4 Mini-Contexts from Phase 1 plus game metadata. This JSON is consumed
+    simultaneously by the 4 Macro-Skills in Phase 3 for parallel analysis.
+
+# ============================================================
+# 1. MASTER-JSON SCHEMA
+# ============================================================
+master_json:
+  $id: "https://getsmart.dev/schemas/v1/master-json"
+  $schema: "http://json-schema.org/draft-07/schema#"
+  title: "GetSmart Master-JSON"
+  description: "Super-JSON consolidating all game data for parallel analysis"
+  type: object
+  required: ["metadata", "game_metadata", "mini_contexts", "partitions"]
+
+  properties:
+    # =====================================================================
+    # 1.1 METADATA
+    # =====================================================================
+    metadata:
+      type: object
+      required: ["game_id", "game_name", "generated_at", "version", "workers_executed", "workers_failed"]
+      properties:
+        game_id:
+          type: string
+          format: uuid
+          description: "Internal game UUID in GetSmart"
+
+        game_name:
+          type: string
+          description: "Exact game name"
+
+        generated_at:
+          type: string
+          format: date-time
+          description: "ISO 8601 timestamp of Master-JSON generation"
+
+        version:
+          type: string
+          pattern: "^\d+\.\d+\.\d+$"
+          description: "Master-JSON schema version"
+
+        workers_executed:
+          type: array
+          items:
+            type: string
+            enum: ["design_art", "user_experience", "technology_systems", "strategy_market"]
+          description: "Successfully executed workers"
+
+        workers_failed:
+          type: array
+          items:
+            type: string
+            enum: ["design_art", "user_experience", "technology_systems", "strategy_market"]
+          description: "Failed workers (empty if all succeeded)"
+
+        total_evidence_count:
+          type: integer
+          minimum: 0
+          description: "Sum of all evidence sources collected"
+
+        overall_confidence_score:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+          description: "Weighted average of worker confidence scores"
+
+    # =====================================================================
+    # 1.2 GAME METADATA
+    # =====================================================================
+    game_metadata:
+      type: object
+      required: ["game_id", "name", "release_year"]
+      properties:
+        game_id:
+          type: string
+          format: uuid
+
+        name:
+          type: string
+
+        release_year:
+          type: integer
+          minimum: 1970
+          maximum: 2100
+
+        aliases:
+          type: array
+          items:
+            type: string
+          description: "Alternative game names"
+
+        igdb:
+          type: object
+          properties:
+            id:
+              type: integer
+            genres:
+              type: array
+              items:
+                type: string
+            themes:
+              type: array
+              items:
+                type: string
+            game_modes:
+              type: array
+              items:
+                type: string
+            player_perspectives:
+              type: array
+              items:
+                type: string
+            game_engines:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  name:
+                    type: string
+            involved_companies:
+              type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  role:
+                    type: string
+                    enum: ["developer", "publisher", "porting", "supporting"]
+                  type:
+                    type: string
+            platforms:
+              type: array
+              items:
+                type: string
+            languages:
+              type: array
+              items:
+                type: string
+            language_supports:
+              type: array
+              items:
+                type: object
+                properties:
+                  language:
+                    type: string
+                  interface:
+                    type: boolean
+                  audio:
+                    type: boolean
+                  subtitles:
+                    type: boolean
+            multiplayer_modes:
+              type: array
+              items:
+                type: string
+            online_coop:
+              type: boolean
+            offline_coop:
+              type: boolean
+            lan_coop:
+              type: boolean
+            split_screen:
+              type: boolean
+            cross_play:
+              type: boolean
+            storyline:
+              type: ["string", "null"]
+            summary:
+              type: ["string", "null"]
+            cover_url:
+              type: ["string", "null"]
+              format: uri
+            screenshots:
+              type: array
+              items:
+                type: object
+                properties:
+                  url:
+                    type: string
+                    format: uri
+                  width:
+                    type: integer
+                  height:
+                    type: integer
+            videos:
+              type: array
+              items:
+                type: object
+                properties:
+                  url:
+                    type: string
+                    format: uri
+                  name:
+                    type: string
+            artworks:
+              type: array
+              items:
+                type: object
+                properties:
+                  url:
+                    type: string
+                    format: uri
+                  width:
+                    type: integer
+                  height:
+                    type: integer
+            total_rating:
+              type: ["number", "null"]
+              minimum: 0
+              maximum: 100
+            total_rating_count:
+              type: integer
+              minimum: 0
+            hypes:
+              type: integer
+              minimum: 0
+            follows:
+              type: integer
+              minimum: 0
+
+        rawg:
+          type: object
+          properties:
+            id:
+              type: integer
+            description_raw:
+              type: ["string", "null"]
+            metacritic:
+              type: ["integer", "null"]
+              minimum: 0
+              maximum: 100
+            esrb_rating:
+              type: ["string", "null"]
+            ratings:
+              type: array
+              items:
+                type: object
+                properties:
+                  title:
+                    type: string
+                  count:
+                    type: integer
+                  percent:
+                    type: number
+            ratings_count:
+              type: integer
+              minimum: 0
+            reviews_text_count:
+              type: integer
+              minimum: 0
+            added:
+              type: integer
+              minimum: 0
+            added_by_status:
+              type: object
+            suggestions_count:
+              type: integer
+              minimum: 0
+
+        steam:
+          type: object
+          properties:
+            app_id:
+              type: integer
+            price_overview:
+              type: ["object", "null"]
+              properties:
+                currency:
+                  type: string
+                initial:
+                  type: integer
+                final:
+                  type: integer
+                discount_percent:
+                  type: integer
+            is_free:
+              type: boolean
+            dlc_count:
+              type: integer
+              minimum: 0
+            packages:
+              type: array
+              items:
+                type: object
+            recommendations:
+              type: ["integer", "null"]
+            release_date:
+              type: ["string", "null"]
+            coming_soon:
+              type: boolean
+            supported_languages:
+              type: ["string", "null"]
+            system_requirements:
+              type: object
+              properties:
+                minimum:
+                  type: ["string", "null"]
+                recommended:
+                  type: ["string", "null"]
+            controller_support:
+              type: boolean
+            full_controller_support:
+              type: boolean
+            steam_cloud:
+              type: boolean
+            steam_achievements:
+              type: boolean
+            categories:
+              type: array
+              items:
+                type: string
+            developers:
+              type: array
+              items:
+                type: string
+            publishers:
+              type: array
+              items:
+                type: string
+            pc_requirements:
+              type: ["object", "null"]
+            mac_requirements:
+              type: ["object", "null"]
+            linux_requirements:
+              type: ["object", "null"]
+            current_player_count:
+              type: ["integer", "null"]
+
+        steamspy:
+          type: object
+          properties:
+            owners_range:
+              type: ["string", "null"]
+            average_playtime:
+              type: ["integer", "null"]
+            median_playtime:
+              type: ["integer", "null"]
+            ccu:
+              type: ["integer", "null"]
+            tags:
+              type: array
+              items:
+                type: string
+            positive_reviews:
+              type: ["integer", "null"]
+            negative_reviews:
+              type: ["integer", "null"]
+            price:
+              type: ["integer", "null"]
+            discount:
+              type: ["integer", "null"]
+
+    # =====================================================================
+    # 1.3 MINI-CONTEXTS
+    # =====================================================================
+    mini_contexts:
+      type: object
+      required: ["design_art", "user_experience", "technology_systems", "strategy_market"]
+      properties:
+        design_art:
+          $ref: "#/definitions/mini_context_design_art"
+        user_experience:
+          $ref: "#/definitions/mini_context_user_experience"
+        technology_systems:
+          $ref: "#/definitions/mini_context_technology_systems"
+        strategy_market:
+          $ref: "#/definitions/mini_context_strategy_market"
+
+    # =====================================================================
+    # 1.4 PARTITIONS (17 Categories)
+    # =====================================================================
+    partitions:
+      type: object
+      description: "Mapping of each thematic category to its source in Mini-Contexts"
+      properties:
+        # Design & Art (5)
+        gameplay:
+          type: object
+          properties:
+            source_macro_skill:
+              type: string
+              const: "design_art"
+            source_path:
+              type: string
+              const: "mini_contexts.design_art.semantic_data.gameplay_mechanics"
+            evidence_count:
+              type: integer
+            confidence_score:
+              type: number
+
+        level_design:
+          type: object
+          properties:
+            source_macro_skill:
+              type: string
+              const: "design_art"
+            source_path:
+              type: string
+              const: "mini_contexts.design_art.semantic_data.level_design"
+            evidence_count:
+              type: integer
+            confidence_score:
+              type: number
+
+        narrative:
+          type: object
+          properties:
+            source_macro_skill:
+              type: string
+              const: "design_art"
+            source_path:
+              type: string
+              const: "mini_contexts.design_art.semantic_data.narrative"
+            evidence_count:
+              type: integer
+            confidence_score:
+              type: number
+
+        art_direction:
+          type: object
+          properties:
+            source_macro_skill:
+              type: string
+              const: "design_art"
+            source_path:
+              type: string
+              const: "mini_contexts.design_art.semantic_data.art_direction"
+            evidence_count:
+              type: integer
+            confidence_score:
+              type: number
+
+        sound_design:
+          type: object
+          properties:
+            source_macro_skill:
+              type: string
+              const: "design_art"
+            source_path:
+              type: string
+              const: "mini_contexts.design_art.semantic_data.sound_design"
+            evidence_count:
+              type: integer
+            confidence_score:
+              type: number
+
+        # User Experience (3)
+        ui_ux:
+          type: object
+          properties:
+            source_macro_skill:
+              type: string
+              const: "user_experience"
+            source_path:
+              type: string
+              const: "mini_contexts.user_experience.semantic_data.ui_ux"
+            evidence_count:
+              type: integer
+            confidence_score:
+              type: number
+
+        accessibility:
+          type: object
+          properties:
+            source_macro_skill:
+              type: string
+              const: "user_experience"
+            source_path:
+              type: string
+              const: "mini_contexts.user_experience.semantic_data.accessibility"
+            evidence_count:
+              type: integer
+            confidence_score:
+              type: number
+
+        localization:
+          type: object
+          properties:
+            source_macro_skill:
+              type: string
+              const: "user_experience"
+            source_path:
+              type: string
+              const: "mini_contexts.user_experience.semantic_data.localization"
+            evidence_count:
+              type: integer
+            confidence_score:
+              type: number
+
+        # Technology & Systems (3)
+        technology_performance:
+          type: object
+          properties:
+            source_macro_skill:
+              type: string
+              const: "technology_systems"
+            source_path:
+              type: string
+              const: "mini_contexts.technology_systems.semantic_data.technology_performance"
+            evidence_count:
+              type: integer
+            confidence_score:
+              type: number
+
+        multiplayer_social:
+          type: object
+          properties:
+            source_macro_skill:
+              type: string
+              const: "technology_systems"
+            source_path:
+              type: string
+              const: "mini_contexts.technology_systems.semantic_data.multiplayer_social"
+            evidence_count:
+              type: integer
+            confidence_score:
+              type: number
+
+        platforms_distribution:
+          type: object
+          properties:
+            source_macro_skill:
+              type: string
+              const: "technology_systems"
+            source_path:
+              type: string
+              const: "mini_contexts.technology_systems.semantic_data.platforms_distribution"
+            evidence_count:
+              type: integer
+            confidence_score:
+              type: number
+
+        # Strategy & Market (6)
+        audience:
+          type: object
+          properties:
+            source_macro_skill:
+              type: string
+              const: "strategy_market"
+            source_path:
+              type: string
+              const: "mini_contexts.strategy_market.semantic_data.audience"
+            evidence_count:
+              type: integer
+            confidence_score:
+              type: number
+
+        business_model:
+          type: object
+          properties:
+            source_macro_skill:
+              type: string
+              const: "strategy_market"
+            source_path:
+              type: string
+              const: "mini_contexts.strategy_market.semantic_data.business_model"
+            evidence_count:
+              type: integer
+            confidence_score:
+              type: number
+
+        retention_live_ops:
+          type: object
+          properties:
+            source_macro_skill:
+              type: string
+              const: "strategy_market"
+            source_path:
+              type: string
+              const: "mini_contexts.strategy_market.semantic_data.retention_live_ops"
+            evidence_count:
+              type: integer
+            confidence_score:
+              type: number
+
+        production_business:
+          type: object
+          properties:
+            source_macro_skill:
+              type: string
+              const: "strategy_market"
+            source_path:
+              type: string
+              const: "mini_contexts.strategy_market.semantic_data.production_business"
+            evidence_count:
+              type: integer
+            confidence_score:
+              type: number
+
+        marketing:
+          type: object
+          properties:
+            source_macro_skill:
+              type: string
+              const: "strategy_market"
+            source_path:
+              type: string
+              const: "mini_contexts.strategy_market.semantic_data.marketing"
+            evidence_count:
+              type: integer
+            confidence_score:
+              type: number
+
+        cultural_impact:
+          type: object
+          properties:
+            source_macro_skill:
+              type: string
+              const: "strategy_market"
+            source_path:
+              type: string
+              const: "mini_contexts.strategy_market.semantic_data.cultural_impact"
+            evidence_count:
+              type: integer
+            confidence_score:
+              type: number
+
+  # =========================================================================
+  # DEFINITIONS
+  # =========================================================================
+  definitions:
+    # =====================================================================
+    # Common Metadata
+    # =====================================================================
+    mini_context_metadata:
+      type: object
+      required: ["game_id", "game_name", "macro_skill", "worker_id", "generated_at", "data_sources"]
+      properties:
+        game_id:
+          type: string
+          format: uuid
+        game_name:
+          type: string
+        macro_skill:
+          type: string
+          enum: ["Design and Art", "User Experience", "Technology and Systems", "Strategy and Market"]
+        worker_id:
+          type: string
+          enum: ["scraper_design_art", "scraper_user_experience", "scraper_technology_systems", "scraper_strategy_market"]
+        generated_at:
+          type: string
+          format: date-time
+        data_sources:
+          type: array
+          items:
+            type: string
+            enum: ["IGDB", "RAWG", "Steam", "SteamSpy", "Tavily"]
+
+    # =====================================================================
+    # Semantic Source
+    # =====================================================================
+    semantic_source:
+      type: object
+      required: ["url", "title", "snippet", "platform"]
+      properties:
+        url:
+          type: string
+          format: uri
+        title:
+          type: string
+        snippet:
+          type: string
+        platform:
+          type: string
+          enum: ["reddit", "youtube", "blogs", "press", "steam_reviews", "stackoverflow", "forums", "github", "hackernews", "twitter", "dev_blogs"]
+        published_at:
+          type: ["string", "null"]
+          format: date-time
+        author:
+          type: ["string", "null"]
+
+    # =====================================================================
+    # Semantic Category
+    # =====================================================================
+    semantic_category:
+      type: object
+      properties:
+        sources:
+          type: array
+          items:
+            $ref: "#/definitions/semantic_source"
+        summary:
+          type: ["string", "null"]
+
+    # =====================================================================
+    # Mini-Context: Design and Art
+    # =====================================================================
+    mini_context_design_art:
+      type: object
+      required: ["metadata", "hard_data", "semantic_data", "evidence_count", "confidence_score"]
+      properties:
+        metadata:
+          $ref: "#/definitions/mini_context_metadata"
+        hard_data:
+          type: object
+          properties:
+            genres:
+              type: array
+              items:
+                type: string
+            themes:
+              type: array
+              items:
+                type: string
+            game_modes:
+              type: array
+              items:
+                type: string
+            player_perspectives:
+              type: array
+              items:
+                type: string
+            game_engines:
+              type: array
+              items:
+                type: string
+            franchises:
+              type: array
+              items:
+                type: string
+            collections:
+              type: array
+              items:
+                type: string
+            storyline:
+              type: ["string", "null"]
+            summary:
+              type: ["string", "null"]
+            cover_url:
+              type: ["string", "null"]
+              format: uri
+            screenshots:
+              type: array
+              items:
+                type: object
+                properties:
+                  url:
+                    type: string
+                    format: uri
+                  width:
+                    type: integer
+                  height:
+                    type: integer
+            videos:
+              type: array
+              items:
+                type: object
+                properties:
+                  url:
+                    type: string
+                    format: uri
+                  name:
+                    type: string
+            artworks:
+              type: array
+              items:
+                type: object
+                properties:
+                  url:
+                    type: string
+                    format: uri
+                  width:
+                    type: integer
+                  height:
+                    type: integer
+            description_raw:
+              type: ["string", "null"]
+            metacritic:
+              type: ["integer", "null"]
+            esrb_rating:
+              type: ["string", "null"]
+            ratings_distribution:
+              type: object
+            achievements_schema:
+              type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  description:
+                    type: string
+                  icon:
+                    type: string
+                    format: uri
+        semantic_data:
+          type: object
+          properties:
+            gameplay_mechanics:
+              $ref: "#/definitions/semantic_category"
+            level_design:
+              $ref: "#/definitions/semantic_category"
+            narrative:
+              $ref: "#/definitions/semantic_category"
+            art_direction:
+              $ref: "#/definitions/semantic_category"
+            sound_design:
+              $ref: "#/definitions/semantic_category"
+        evidence_count:
+          type: integer
+          minimum: 0
+        confidence_score:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+
+    # =====================================================================
+    # Mini-Context: User Experience
+    # =====================================================================
+    mini_context_user_experience:
+      type: object
+      required: ["metadata", "hard_data", "semantic_data", "evidence_count", "confidence_score"]
+      properties:
+        metadata:
+          $ref: "#/definitions/mini_context_metadata"
+        hard_data:
+          type: object
+          properties:
+            platforms:
+              type: array
+              items:
+                type: string
+            languages_supported:
+              type: array
+              items:
+                type: string
+            system_requirements:
+              type: object
+              properties:
+                minimum:
+                  type: ["string", "null"]
+                recommended:
+                  type: ["string", "null"]
+            controller_support:
+              type: boolean
+            full_controller_support:
+              type: boolean
+            steam_cloud:
+              type: boolean
+            steam_achievements:
+              type: boolean
+        semantic_data:
+          type: object
+          properties:
+            ui_ux:
+              $ref: "#/definitions/semantic_category"
+            accessibility:
+              $ref: "#/definitions/semantic_category"
+            localization:
+              $ref: "#/definitions/semantic_category"
+            steam_reviews_sample:
+              type: object
+              properties:
+                positive_count:
+                  type: integer
+                negative_count:
+                  type: integer
+                review_score:
+                  type: ["number", "null"]
+                sample_reviews:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      review:
+                        type: string
+                      voted_up:
+                        type: boolean
+                      playtime_hours:
+                        type: number
+                      language:
+                        type: string
+        evidence_count:
+          type: integer
+          minimum: 0
+        confidence_score:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+
+    # =====================================================================
+    # Mini-Context: Technology and Systems
+    # =====================================================================
+    mini_context_technology_systems:
+      type: object
+      required: ["metadata", "hard_data", "semantic_data", "evidence_count", "confidence_score"]
+      properties:
+        metadata:
+          $ref: "#/definitions/mini_context_metadata"
+        hard_data:
+          type: object
+          properties:
+            game_engines:
+              type: array
+              items:
+                type: string
+            platforms:
+              type: array
+              items:
+                type: string
+            multiplayer_modes:
+              type: array
+              items:
+                type: string
+            online_coop:
+              type: boolean
+            offline_coop:
+              type: boolean
+            lan_coop:
+              type: boolean
+            split_screen:
+              type: boolean
+            cross_play:
+              type: boolean
+            pc_requirements:
+              type: ["object", "null"]
+            mac_requirements:
+              type: ["object", "null"]
+            linux_requirements:
+              type: ["object", "null"]
+            current_player_count:
+              type: ["integer", "null"]
+        semantic_data:
+          type: object
+          properties:
+            technology_performance:
+              $ref: "#/definitions/semantic_category"
+            multiplayer_social:
+              $ref: "#/definitions/semantic_category"
+            platforms_distribution:
+              $ref: "#/definitions/semantic_category"
+        evidence_count:
+          type: integer
+          minimum: 0
+        confidence_score:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+
+    # =====================================================================
+    # Mini-Context: Strategy and Market
+    # =====================================================================
+    mini_context_strategy_market:
+      type: object
+      required: ["metadata", "hard_data", "semantic_data", "evidence_count", "confidence_score"]
+      properties:
+        metadata:
+          $ref: "#/definitions/mini_context_metadata"
+        hard_data:
+          type: object
+          properties:
+            involved_companies:
+              type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  role:
+                    type: string
+                  type:
+                    type: string
+            developers:
+              type: array
+              items:
+                type: string
+            publishers:
+              type: array
+              items:
+                type: string
+            franchises:
+              type: array
+              items:
+                type: string
+            total_rating:
+              type: ["number", "null"]
+            total_rating_count:
+              type: integer
+            ratings_distribution:
+              type: object
+            price_overview:
+              type: ["object", "null"]
+            is_free:
+              type: boolean
+            dlc_count:
+              type: integer
+            recommendations:
+              type: ["integer", "null"]
+            release_date:
+              type: ["string", "null"]
+            owners_range:
+              type: ["string", "null"]
+            average_playtime:
+              type: ["integer", "null"]
+            median_playtime:
+              type: ["integer", "null"]
+            ccu:
+              type: ["integer", "null"]
+            steamspy_tags:
+              type: array
+              items:
+                type: string
+            positive_reviews:
+              type: ["integer", "null"]
+            negative_reviews:
+              type: ["integer", "null"]
+            current_player_count:
+              type: ["integer", "null"]
+        semantic_data:
+          type: object
+          properties:
+            audience:
+              $ref: "#/definitions/semantic_category"
+            business_model:
+              $ref: "#/definitions/semantic_category"
+            retention_live_ops:
+              $ref: "#/definitions/semantic_category"
+            production_business:
+              $ref: "#/definitions/semantic_category"
+            marketing:
+              $ref: "#/definitions/semantic_category"
+            cultural_impact:
+              $ref: "#/definitions/semantic_category"
+        evidence_count:
+          type: integer
+          minimum: 0
+        confidence_score:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+
+    synthesis_input:
+      type: object
+      required: ["master_json", "macro_outputs"]
+      properties:
+        master_json:
+          type: object
+        macro_outputs:
+          type: object
+          required: ["design_art", "user_experience", "technology_systems", "strategy_market"]
+          properties:
+            design_art:
+              type: object
+            user_experience:
+              type: object
+            technology_systems:
+              type: object
+            strategy_market:
+              type: object
+
+# ============================================================
+# 2. VALIDATION RULES
+# ============================================================
+validation:
+  rules:
+    - name: "evidence_count_non_negative"
+      description: "evidence_count must be >= 0 in all Mini-Contexts"
+      apply_to: ["mini_contexts.*.evidence_count"]
+
+    - name: "confidence_score_range"
+      description: "confidence_score must be between 0.0 and 1.0"
+      apply_to: ["mini_contexts.*.confidence_score", "metadata.overall_confidence_score"]
+
+    - name: "semantic_source_required_fields"
+      description: "Every semantic source must have url, title, snippet, and platform"
+      apply_to: ["mini_contexts.*.semantic_data.*.sources.*"]
+
+    - name: "partition_mapping_consistency"
+      description: "Partitions must map to existing paths in Mini-Contexts"
+      apply_to: ["partitions.*.source_path"]
+
+    - name: "worker_failure_handling"
+      description: "If a worker fails, its Mini-Context may be null"
+      apply_to: ["mini_contexts.*"]
+      allow_null: true
+
+# ============================================================
+# 3. VERSIONING
+# ============================================================
+changelog:
+  - version: "1.0.0"
+    date: "2026-06-17"
+    changes:
+      - "Initial Master-JSON schema definition"
+      - "4 Mini-Contexts mapped to 4 Macro-Skills"
+      - "17 thematic category partitions"
+      - "Semantic source structure with platform enum"
+      - "Hard data consolidation from IGDB, RAWG, Steam, SteamSpy"
