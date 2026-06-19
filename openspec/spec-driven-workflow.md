@@ -33,11 +33,22 @@ This document defines the complete workflow for Spec-Driven Development (SDD) us
 **Process:**
 ```bash
 # Create specification change
-openspec new change "spec-modification-name"
+openspec new change "spec-modification-name" \
+  --description "Detailed description of the specification modification" \
+  --goal "What this specification change aims to achieve" \
+  --areas "list,of,affected,areas"
 
 # Modify specification files
 openspec/specs/contract_name.yaml
 openspec/specs/contract_name.md
+
+# Optional: Add design specifications
+cd openspec/design/
+# Create design documents as needed
+
+# Optional: Add task specifications  
+cd openspec/tasks/
+# Create task breakdown if needed
 
 # Validation
 openspec validate --all
@@ -47,6 +58,8 @@ git checkout -b feature/spec-modification-name
 git add openspec/specs/contract_name.yaml
 git add openspec/specs/contract_name.md  
 git add openspec/changes/spec-modification-name/
+git add openspec/design/
+git add openspec/tasks/
 git commit -m "feat: Modify contract_name specification per OpenSpec change"
 git push origin feature/spec-modification-name
 
@@ -72,12 +85,23 @@ git push origin feature/spec-modification-name
 **Process:**
 ```bash
 # Create implementation change
-openspec new --type implementation "implement-contract-name"
+openspec new change "implement-contract-name" \
+  --description "Implementation of contract_name functionality per specifications" \
+  --goal "Complete implementation of contract_name contract" \
+  --areas "backend,frontend,integration"
 
 # Implement code only (NO spec modifications)
 backend/app/api/contract_name.py
 frontend/src/modules/contract_name/
 # Other implementation files as per contract
+
+# Optional: Add design specifications for UI components
+cd openspec/design/
+# Create UI/UX design documents if needed
+
+# Optional: Add task specifications for development breakdown  
+cd openspec/tasks/
+# Create detailed task breakdown if needed
 
 # Validation
 openspec validate --all
@@ -106,6 +130,19 @@ git push origin feature/implement-contract-name
 4. Completes OpenSpec change implementation
 
 ## File Management Rules
+
+### OpenSpec Directory Structure
+
+OpenSpec organizes the complete workflow into these domains:
+
+```
+openspec/
+├── specs/          # Core specification contracts
+├── design/         # UI/UX design specifications  
+├── tasks/          # Implementation task breakdowns
+├── changes/        # Change tracking metadata
+└── updates/        # Specification updates
+```
 
 ### Contract-Specific File Ownership
 
@@ -229,8 +266,19 @@ As Tech Lead, you have direct approval authority:
 ### For Specification Changes (Tech Lead Authority)
 ```bash
 # 1. Create and modify specs
-openspec new change "update-contract-behavior"
+openspec new change "update-contract-behavior" \
+  --description "Detailed description of contract behavior modifications" \
+  --goal "Update contract behavior to fix issues/enhance functionality" \
+  --areas "specification,architecture,dependencies"
 # Modify openspec/specs/contract_name.yaml
+
+# Optional: Add design specifications for new components
+cd openspec/design/
+# Create design documents as needed
+
+# Optional: Add task specifications for implementation breakdown  
+cd openspec/tasks/
+# Create task breakdown as needed
 
 # 2. Validate locally
 openspec validate --all
@@ -238,7 +286,9 @@ openspec validate --all
 # 3. Create PR for documentation
 git checkout -b feature/update-contract-behavior
 git add openspec/specs/contract_name.yaml
-git add openspec/changes/update-contract-behavior/
+git add openspec/updates/update-contract-behavior/
+git add openspec/design/
+git add openspec/tasks/
 git commit -m "feat: Update contract behavior per OpenSpec change"
 git push origin feature/update-contract-behavior
 
@@ -253,10 +303,27 @@ openspec archive change/update-contract-behavior
 ### For Team Member Implementation Changes
 ```bash
 # 1. Team member creates implementation
-openspec new --type implementation "implement-contract-x"
+openspec new change "implement-contract-x" \
+  --description "Implementation of contract_x functionality per specifications" \
+  --goal "Complete implementation of contract_x with full compliance to specs" \
+  --areas "backend,frontend,integration,testing"
 # Implement code files per contract
 
+# Optional: Add design specifications for UI components if needed
+cd openspec/design/
+# Create UI/UX design documents for new components
+
+# Optional: Add detailed task specifications for development workflow
+cd openspec/tasks/
+# Create detailed implementation task breakdown
+
 # 2. Team member requests review
+git checkout -b feature/implement-contract-x
+git add backend/ frontend/
+git add openspec/changes/implement-contract-x/
+git add openspec/design/
+git add openspec/tasks/
+git commit -m "feat: Implement contract_x per OpenSpec specifications"
 git push origin feature/implement-contract-x
 # Creates PR requesting Tech Lead review
 
@@ -339,6 +406,9 @@ git commit -m "fix: Resolve validation errors"
 
 ## Files Modified (Contract-Specific Only)
 - [ ] `openspec/specs/contract_name.yaml`
+- [ ] `openspec/design/contract_design.md`
+- [ ] `openspec/tasks/contract_tasks.md`
+- [ ] `openspec/changes/change-name/`
 - [ ] `backend/app/api/contract_file.py`
 - [ ] `frontend/src/modules/contract_name/`
 
@@ -356,6 +426,8 @@ git commit -m "fix: Resolve validation errors"
 ## Review Requirements
 - [ ] Code review from Tech Lead required
 - [ ] Architecture impact assessment needed
+- [ ] Design specifications reviewed (if applicable)
+- [ ] Task breakdown validated (if applicable)
 ```
 
 ### Commit Message Standards
