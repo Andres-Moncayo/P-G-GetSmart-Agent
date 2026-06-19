@@ -94,7 +94,6 @@ Create a `.env` file in the backend directory:
 
 ```env
 DATABASE_URL=postgresql://neondb_owner:npg_QZN5qMuUjv9h@ep-misty-sky-aqh6wq9v-pooler.c-8.us-east-1.aws.neon.tech/getsmarth?sslmode=require&channel_binding=require
-REDIS_URL=redis://localhost:6379
 DEBUG=true
 ```
 
