@@ -136,6 +136,19 @@ openspec new change
 openspec schemas
 ```
 
+### Complete Workflow Documentation
+
+For detailed workflow procedures, including:
+- File upload restrictions per contract ownership
+- GitHub PR approval workflows with Tech Lead authority
+- Specification changes vs implementation changes
+- Quality assurance validation procedures
+- Team communication standards and templates
+
+**See:** `openspec/spec-driven-workflow.md`
+
+This workflow ensures clean modular development while maintaining full traceability between OpenSpec contracts and code implementation.
+
 ---
 
 ## 🤖 AI-Assisted Development Process
