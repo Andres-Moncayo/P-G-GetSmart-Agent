@@ -1,0 +1,41 @@
+# ============================================================
+# Change Metadata: replace-redis-with-fastapi-cache
+# Type: Implementation Change (Code Only)
+# Schema: spec-driven
+# ============================================================
+
+name: replace-redis-with-fastapi-cache
+type: implementation
+schema: spec-driven
+created_at: 2026-06-19T00:00:00Z
+workflow: spec-driven
+
+# Change Description
+description: |
+  Replace Redis caching with FastAPI in-memory caching for API responses.
+  This change removes Redis dependency and uses FastAPI's built-in caching functionality
+  to cache API responses from IGDB, RAWG, Steam Storefront, and SteamSpy endpoints.
+
+# Files Modified
+files:
+  modified:
+    - openspec/specs/scraper/scraper_contract.yaml
+    - backend/requirements.txt
+  
+affected_contracts:
+  - scraper_contract.yaml
+
+# Implementation Details
+implementation:
+  cache_strategy:
+    storage: "FastAPI in-memory caching"
+    ttl_seconds: 3600
+    key_format: "scraper:{game_id}:{api_source}:{endpoint_hash}"
+    
+  replaced_components:
+    - Redis cache layer
+    - Redis connection requirements
+
+# Approval (Tech Lead)
+approved_by: Tech Lead
+approved_at: 2026-06-19T00:00:00Z
