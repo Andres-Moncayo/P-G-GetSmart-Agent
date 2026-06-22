@@ -9,7 +9,7 @@ import asyncio
 import logging
 
 from ..celery_app import celery_app
-from ..skills.user_experience import UserExperienceSkill
+from ..services.macro_skills.user_experience import UserExperienceSkill
 
 logger = logging.getLogger(__name__)
 

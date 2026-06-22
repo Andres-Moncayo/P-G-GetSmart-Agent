@@ -12,8 +12,8 @@ from celery.result import AsyncResult
 from fastapi import APIRouter, HTTPException
 
 from ..celery_app import celery_app
-from ..skills.user_experience.schemas import JobStatusResponse, TaskResponse, UXMiniContext
-from ..skills.user_experience import UserExperienceSkill
+from ..services.macro_skills.user_experience.schemas import JobStatusResponse, TaskResponse, UXMiniContext
+from ..services.macro_skills.user_experience import UserExperienceSkill
 from ..tasks.skill_tasks import run_ux_skill
 
 logger = logging.getLogger(__name__)

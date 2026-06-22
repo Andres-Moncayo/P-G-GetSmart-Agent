@@ -20,8 +20,8 @@ from google import genai
 from google.genai import types
 from tenacity import AsyncRetrying, RetryError, stop_after_attempt, wait_exponential
 
-from ..core.config import GEMINI_API_KEY
-from ..tasks.cache_manager import CacheManager
+from ...core.config import GEMINI_API_KEY
+from ...tasks.cache_manager import CacheManager
 
 logger = logging.getLogger(__name__)
 
