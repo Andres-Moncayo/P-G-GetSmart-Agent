@@ -6,3 +6,5 @@ alembic
 celery
 python-dotenv
 fastapi-cache2
+google-generativeai
+pydantic[email]
