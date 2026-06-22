@@ -105,33 +105,17 @@ class DesignArtService:
         # Fallback analysis
         return self._create_fallback_gameplay_analysis(context)
 
-    def _create_gameplay_prompt(self, context: Dict[str, Any]) -> str:
+def _create_gameplay_prompt(self, context: Dict[str, Any]) -> str:
         """Create a prompt for gameplay analysis."""
-        return f"""
-        Analyze the gameplay mechanics for a game with the following characteristics:
+        from .system_prompt import GAMEPLAY_ANALYSIS_PROMPT
         
-        Genres: {context['genres']}
-        Game Modes: {context['game_modes']}
-        Themes: {context['themes']}
-        Storyline: {context['storyline'][:500]}...
-        
-        Available sources: {len(context['sources'])}
-        
-        Provide a structured analysis focusing on:
-        1. Core gameplay mechanics and their innovation level
-        2. Progression system design
-        3. Difficulty approach and balance
-        4. Player feedback patterns
-        
-        Use only these enum values:
-        - innovation_level: industry_standard, evolutionary, revolutionary
-        - player_reception: negative, mixed, positive, acclaimed
-        - progression_type: linear, branching, open_ended, skill_tree, hybrid
-        - pacing: too_slow, balanced, too_fast, uneven
-        - difficulty_approach: handholding, guided, challenging, punishing, adaptive
-        
-        Be concise but thorough. Base analysis on the provided context.
-        """
+        return GAMEPLAY_ANALYSIS_PROMPT.format(
+            genres=context['genres'],
+            game_modes=context['game_modes'], 
+            themes=context['themes'],
+            storyline=context['storyline'][:500],
+            source_count=len(context['sources'])
+        )
 
     def _parse_gameplay_response(self, response_text: str, context: Dict[str, Any]) -> GameplayAnalysis:
         """Parse LLM response into structured gameplay analysis."""
