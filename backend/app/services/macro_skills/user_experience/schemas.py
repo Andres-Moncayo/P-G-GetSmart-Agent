@@ -117,20 +117,3 @@ class UXAnalysisOutput(LLMOutput):
     confidence: ConfidenceMetrics
 
 
-# =====================================================================
-# API RESPONSE SCHEMAS
-# =====================================================================
-
-class TaskResponse(BaseModel):
-    """Response returned when analysis is dispatched as a Celery task."""
-    job_id: str
-    status: str
-    skill_id: str = "user_experience"
-    game_id: Optional[str] = None
-
-
-class JobStatusResponse(BaseModel):
-    job_id: str
-    status: str
-    result: Optional[dict[str, Any]] = None
-    error: Optional[str] = None
