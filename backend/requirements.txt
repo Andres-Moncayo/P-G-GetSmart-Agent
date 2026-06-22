@@ -1,7 +1,11 @@
 fastapi
 uvicorn[standard]
-sqlalchemy
+sqlalchemy[asyncio]
 psycopg2-binary
+asyncpg
 alembic
 celery
 python-dotenv
+python-jose[cryptography]
+httpx
+pydantic
