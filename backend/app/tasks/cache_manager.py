@@ -8,7 +8,7 @@ Maintains same cache patterns and TTL as Redis implementation.
 from datetime import timedelta
 from typing import Any, Optional
 from fastapi_cache import FastAPICache
-from fastapi_cache.backends.memory import InMemoryBackend
+from fastapi_cache.backends.inmemory import InMemoryBackend
 from fastapi_cache.decorator import cache
 
 # Cache configuration

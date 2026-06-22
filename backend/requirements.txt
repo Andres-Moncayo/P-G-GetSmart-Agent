@@ -6,3 +6,13 @@ alembic
 celery
 python-dotenv
 fastapi-cache2
+python-jose[cryptography]
+passlib[bcrypt]
+httpx
+python-multipart
+fastapi-cors
+fastapi-limiter
+redis
+pydantic-settings
+jinja2
+email-validator
