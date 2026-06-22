@@ -69,10 +69,9 @@ The pipeline follows a structured four-phase approach:
 ```bash
 # Clone repository
 git clone https://github.com/alejandroalzate01/g-GetSmart-Agent.git
-cd GetSmart
 
 # Install OpenSpec CLI
-npm install -g openspec
+npm install -g @fission-ai/openspec@latest
 
 # Validate OpenSpec contracts
 openspec validate --all
@@ -94,8 +93,7 @@ npm run dev
 Create a `.env` file in the backend directory:
 
 ```env
-DATABASE_URL=postgresql://username:password@hostname:port/database_name
-REDIS_URL=redis://localhost:6379
+DATABASE_URL=postgresql://neondb_owner:npg_QZN5qMuUjv9h@ep-misty-sky-aqh6wq9v-pooler.c-8.us-east-1.aws.neon.tech/getsmarth?sslmode=require&channel_binding=require
 DEBUG=true
 ```
 
@@ -162,8 +160,7 @@ This project follows an AI-assisted Spec-Driven Development (SDD) approach that 
 1. **Environment Setup**
    ```bash
    git clone <repository>
-   cd GetSmart
-   npm install openspec
+   npm npm install -g @fission-ai/openspec@latest
    openspec validate --all
    ```
 
@@ -414,10 +411,10 @@ Before committing changes:
 # Validate all OpenSpec contracts
 openspec validate --all
 
-# Run backend tests
+# Run backend tests if you have
 cd backend && python -m pytest
 
-# Run frontend tests  
+# Run frontend tests if you have
 cd frontend && npm test
 
 # Build validation

@@ -919,11 +919,17 @@ caching:
     description: "No LLM cache in Phase 1. Only API response cache."
     llm_cache: false
 
-  api_response_cache:
+api_response_cache:
     enabled: true
     ttl_seconds: 3600
-    storage: "Redis"
+    storage: "FastAPI in-memory"
     key_format: "scraper:{game_id}:{api_source}:{endpoint_hash}"
+    
+    implementation_notes: |
+      FastAPI in-memory caching replaces Redis for simplicity.
+      Uses fastapi-cache with InMemoryBackend for cache storage.
+      Cache persists during application lifetime, clears on restart.
+      Same TTL and key format maintained for consistency.
 
     cached_endpoints:
       - "IGDB game metadata"
