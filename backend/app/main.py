@@ -1,5 +1,29 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from .api.routes import router
 
-app = FastAPI()
-app.include_router(router, prefix='/api')
+app = FastAPI(
+    title="GetSmart Agent API",
+    description="Video game analysis reports CRUD API",
+    version="1.0.0"
+)
+
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Adjust as needed
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Include reports router
+app.include_router(router)
+
+@app.get("/")
+async def root():
+    return {"message": "GetSmart Agent API v1.0.0"}
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
