@@ -15,19 +15,19 @@ app.include_router(skills_router, prefix='/api')
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=["http://localhost:3000"],  # Adjust as needed
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "DELETE"],
-    allow_headers=["Content-Type", "Authorization", "X-CSRF-Token"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# Exception handlers
-@app.exception_handler(SQLAlchemyError)
-async def db_exception_handler(request: Request, exc: SQLAlchemyError):
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Database error occurred"}
-    )
+@app.get("/")
+async def root():
+    return {"message": "GetSmart Agent API v1.0.0"}
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 @app.on_event("startup")
 async def startup():

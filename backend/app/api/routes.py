@@ -57,8 +57,76 @@ class AccessTokenResponse(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+from uuid import UUID
+
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+from .macro_skills.design_art_skill.endpoints import router as design_art_router
+from app.services import ReportService
+
+from app.core import get_current_user
+from app.db.connection import get_db
+from app.models import (
+    Facets,
+    Report,
+    ReportContentResponse,
+    ReportListResponse,
+    ReportUpdateRequest,
+)
+
+reports_router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
 
 router = APIRouter()
+router.include_router(reports_router)
+router.include_router(design_art_router, prefix='/macro-skills/design-art', tags=['macro-skills'])
+
+
+@router.get("/", response_model=ReportListResponse)
+async def list_reports(
+    genre: list[str] | None = Query(None, alias="genre"),
+    developer: list[str] | None = Query(None, alias="developer"),
+    platform: list[str] | None = Query(None, alias="platform"),
+    status: list[str] | None = Query(None, alias="status"),
+    year_from: int | None = Query(None, ge=1980, le=2030, alias="year_from"),
+    year_to: int | None = Query(None, ge=1980, le=2030, alias="year_to"),
+    search: str | None = Query(None, max_length=100, alias="search"),
+    sort_by: str | None = Query(
+        "created_at",
+        pattern=r"^(created_at|game\.name|game\.release_year|updated_at|progress_percent)$",
+        alias="sort_by",
+    ),
+    sort_dir: str | None = Query("desc", pattern=r"^(asc|desc)$", alias="sort_dir"),
+    page: int = Query(1, ge=1, alias="page"),
+    page_size: int = Query(12, ge=1, le=50, alias="page_size"),
+    db: AsyncSession = Depends(get_db),
+    current_user: UUID = Depends(get_current_user),
+):
+    service = ReportService(db, current_user)
+    return await service.list_reports(
+        genre=genre,
+        developer=developer,
+        platform=platform,
+        status=status,
+        year_from=year_from,
+        year_to=year_to,
+        search=search,
+        sort_by=sort_by or "created_at",
+        sort_dir=sort_dir or "desc",
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get("/facets", response_model=Facets)
+async def get_filter_facets(
+    db: AsyncSession = Depends(get_db),
+    current_user: UUID = Depends(get_current_user),
+):
+    service = ReportService(db, current_user)
+    return await service.get_facets()
+
 
 # ============================================================
 # Authentication Endpoints
