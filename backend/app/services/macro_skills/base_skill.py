@@ -16,8 +16,8 @@ import json
 import logging
 from typing import Any
 
-from google import genai
-from google.genai import types
+import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from tenacity import AsyncRetrying, RetryError, stop_after_attempt, wait_exponential
 
 from ...core.config import GEMINI_API_KEY
@@ -35,12 +35,21 @@ class BaseMacroSkill(abc.ABC):
     cache_ttl: int = 86400  # 24h — matches ux_skill.yaml caching config
 
     def __init__(self) -> None:
-        self._client = genai.Client(api_key=GEMINI_API_KEY)
-        self._config = types.GenerateContentConfig(
+        genai.configure(api_key=GEMINI_API_KEY)
+        self._model = genai.GenerativeModel(
+            model_name=self.model_name,
             system_instruction=self.system_prompt,
-            temperature=self.temperature,
-            max_output_tokens=self.max_output_tokens,
-            response_mime_type="application/json",  # forces structured JSON output
+            generation_config=genai.types.GenerationConfig(
+                temperature=self.temperature,
+                max_output_tokens=self.max_output_tokens,
+                response_mime_type="application/json",  # forces structured JSON output
+            ),
+            safety_settings={
+                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            }
         )
 
     # ------------------------------------------------------------------
@@ -81,11 +90,7 @@ class BaseMacroSkill(abc.ABC):
             reraise=True,
         ):
             with attempt:
-                response = await self._client.aio.models.generate_content(
-                    model=self.model_name,
-                    contents=prompt,
-                    config=self._config,
-                )
+                response = self._model.generate_content(prompt)
                 return json.loads(response.text)
 
     # ------------------------------------------------------------------
