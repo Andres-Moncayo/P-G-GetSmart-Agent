@@ -4,9 +4,11 @@ sqlalchemy[asyncio]
 psycopg2-binary
 asyncpg
 alembic
-celery
 python-dotenv
 python-jose[cryptography]
 httpx
 pydantic
 fastapi-cache2
+google-genai>=2.0.0
+jinja2>=3.1.0
+tenacity>=8.2.0

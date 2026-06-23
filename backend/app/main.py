@@ -1,13 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .api.routes import router
+from .api.routes import router as reports_router
+from .api.skills_routes import skills_router
 from .tasks.cache_manager import CacheManager
 
-app = FastAPI(
-    title="GetSmart Agent API",
-    description="Video game analysis reports CRUD API",
-    version="1.0.0"
-)
+app = FastAPI(title="GetSmart API", version="3.0.0")
+
+# Reports endpoints: /api/v1/reports/*
+app.include_router(reports_router, prefix='/api')
+
+# Skills endpoints: /api/skills/*  
+app.include_router(skills_router, prefix='/api')
 
 # CORS middleware
 app.add_middleware(
@@ -18,9 +21,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include reports router
-app.include_router(router)
-
 @app.get("/")
 async def root():
     return {"message": "GetSmart Agent API v1.0.0"}
@@ -28,3 +28,8 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+@app.on_event("startup")
+async def startup():
+    """Initialize FastAPI in-memory caching."""
+    await CacheManager.init_cache()

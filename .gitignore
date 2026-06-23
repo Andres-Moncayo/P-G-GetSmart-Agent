@@ -26,3 +26,5 @@ logs/
 # Secrets
 .env.local
 
+# Claude
+CLAUDE.md

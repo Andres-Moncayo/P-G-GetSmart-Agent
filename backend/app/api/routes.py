@@ -4,6 +4,8 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from .macro_skills.design_art_skill.endpoints import router as design_art_router
+from app.services import ReportService
 
 from app.core import get_current_user
 from app.db.connection import get_db
@@ -14,9 +16,12 @@ from app.models import (
     ReportListResponse,
     ReportUpdateRequest,
 )
-from app.services import ReportService
 
-router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
+reports_router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
+
+router = APIRouter()
+router.include_router(reports_router)
+router.include_router(design_art_router, prefix='/macro-skills/design-art', tags=['macro-skills'])
 
 
 @router.get("/", response_model=ReportListResponse)

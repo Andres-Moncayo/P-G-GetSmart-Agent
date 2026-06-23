@@ -1,8 +1,7 @@
 import os
+from dotenv import find_dotenv, load_dotenv
 
-from dotenv import load_dotenv
+load_dotenv(find_dotenv())
 
-load_dotenv()
-
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
-ALGORITHM = os.getenv("ALGORITHM", "HS256")
+DATABASE_URL = os.getenv('DATABASE_URL')
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
