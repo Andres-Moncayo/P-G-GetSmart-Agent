@@ -4,12 +4,12 @@ from uuid import UUID
 from pydantic import BaseModel, Field, validator
 
 # ============================================================
-# Game Schema
+# Game Schema (Exact match to data_crud_contract.yaml)
 # ============================================================
 class Game(BaseModel):
     id: str
     name: str
-    slug: str
+    slug: Optional[str] = None
     release_year: Optional[int] = None
     developer: Optional[str] = None
     publisher: Optional[str] = None
@@ -18,14 +18,14 @@ class Game(BaseModel):
     cover_url: Optional[str] = None
 
 # ============================================================
-# Report Schema
+# Report Schema (Exact match to data_crud_contract.yaml)
 # ============================================================
 class Report(BaseModel):
     id: UUID
     game: Game
-    status: str
-    current_phase: Optional[int] = None
-    progress_percent: int = 0
+    status: str = Field(..., pattern=r"^(queued|processing|completed|failed|cancelled)$")
+    current_phase: Optional[int] = Field(None, ge=0, le=4)
+    progress_percent: int = Field(0, ge=0, le=100)
     outputs: Dict[str, Optional[str]] = {}
     metadata: Dict[str, Any] = {}
     summary: Optional[Dict[str, Any]] = None
@@ -71,7 +71,7 @@ class ReportListResponse(BaseModel):
     facets: Facets
 
 class ReportContentRequest(BaseModel):
-    format: str = Field(..., regex="^(markdown|json|json_rag)$")
+    format: str = Field(..., pattern=r"^(markdown|json|json_rag)$")
 
 class ReportContentResponse(BaseModel):
     format: str
@@ -83,17 +83,30 @@ class ReportUpdateRequest(BaseModel):
     notes: Optional[str] = Field(None, max_length=1000)
 
 # ============================================================
-# Filter Parameters
+# Filter Parameters (Matching data_crud_contract.yaml exactly)
 # ============================================================
 class ReportFilters(BaseModel):
-    genre: Optional[List[str]] = None
-    developer: Optional[List[str]] = None
-    platform: Optional[List[str]] = None
-    status: Optional[List[str]] = None
-    year_from: Optional[int] = Field(None, ge=1980, le=2030)
-    year_to: Optional[int] = Field(None, ge=1980, le=2030)
-    search: Optional[str] = Field(None, max_length=100)
-    sort_by: Optional[str] = Field("created_at", regex="^(created_at|game\.name|game\.release_year|updated_at|progress_percent)$")
-    sort_dir: Optional[str] = Field("desc", regex="^(asc|desc)$")
+    genre: Optional[List[str]] = Field(None, description="Filter by genre")
+    developer: Optional[List[str]] = Field(None, description="Filter by developer")
+    platform: Optional[List[str]] = Field(None, description="Filter by platform")
+    status: Optional[List[str]] = Field(None, description="Filter by status")
+    year_from: Optional[int] = Field(None, ge=1980, le=2030, description="Filter from release year")
+    year_to: Optional[int] = Field(None, ge=1980, le=2030, description="Filter to release year")
+    search: Optional[str] = Field(None, max_length=100, description="Search term")
+    sort_by: Optional[str] = Field("created_at", pattern=r"^(created_at|game\.name|game\.release_year|updated_at|progress_percent)$")
+    sort_dir: Optional[str] = Field("desc", pattern=r"^(asc|desc)$")
     page: Optional[int] = Field(1, ge=1)
     page_size: Optional[int] = Field(12, ge=1, le=50)
+
+# Enum values from spec for validation
+class GenreEnum:
+    VALUES = ["Action RPG", "Battle Royale", "MOBA", "Open World", "Adventure", "Action", "RPG", "Strategy", "Shooter", "Fighting", "Racing", "Simulation", "Sports", "Puzzle", "Platformer"]
+
+class DeveloperEnum:
+    VALUES = ["Riot Games", "Epic Games", "FromSoftware", "CD Projekt Red", "Nintendo", "Santa Monica Studio", "Naughty Dog", "Bungie", "Valve", "Blizzard"]
+
+class PlatformEnum:
+    VALUES = ["PC", "PlayStation", "Xbox", "Switch", "Mobile"]
+
+class StatusEnum:
+    VALUES = ["completed", "processing", "queued", "failed"]

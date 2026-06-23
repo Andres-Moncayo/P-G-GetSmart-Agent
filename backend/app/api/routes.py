@@ -11,7 +11,7 @@ from app.models import (
 )
 from app.services import ReportService
 from app.db.connection import get_db
-from app.core.auth import get_current_user
+from app.core import get_current_user
 
 router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
 
@@ -24,8 +24,8 @@ async def list_reports(
     year_from: Optional[int] = Query(None, ge=1980, le=2030, alias="year_from"),
     year_to: Optional[int] = Query(None, ge=1980, le=2030, alias="year_to"),
     search: Optional[str] = Query(None, max_length=100, alias="search"),
-    sort_by: Optional[str] = Query("created_at", regex="^(created_at|game\.name|game\.release_year|updated_at|progress_percent)$", alias="sort_by"),
-    sort_dir: Optional[str] = Query("desc", regex="^(asc|desc)$", alias="sort_dir"),
+sort_by: Optional[str] = Query("created_at", pattern=r"^(created_at|game\.name|game\.release_year|updated_at|progress_percent)$", alias="sort_by"),
+sort_dir: Optional[str] = Query("desc", pattern=r"^(asc|desc)$", alias="sort_dir"),
     page: int = Query(1, ge=1, alias="page"),
     page_size: int = Query(12, ge=1, le=50, alias="page_size"),
     db: AsyncSession = Depends(get_db),
@@ -74,7 +74,7 @@ async def get_report(
 @router.get("/{report_id}/content", response_model=ReportContentResponse)
 async def get_report_content(
     report_id: UUID,
-    format: str = Query(..., regex="^(markdown|json|json_rag)$"),
+format: str = Query(..., pattern=r"^(markdown|json|json_rag)$"),
     db: AsyncSession = Depends(get_db),
     current_user: UUID = Depends(get_current_user)
 ):

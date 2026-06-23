@@ -4,8 +4,7 @@ from sqlalchemy.sql import expression
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 from datetime import datetime
-from app.models import Report, Game, Pagination, Facets, ReportListResponse
-from app.db.connection import AsyncSession
+from app.models import Report, Game, Pagination, Facets, ReportListResponse, FacetCount
 
 class ReportService:
     
@@ -31,67 +30,67 @@ class ReportService:
         List reports with filtering, sorting and pagination
         GET /api/v1/reports
         """
-        query = select(self._get_report_summary_query())
+        # Use the optimized view for reports
+        query = text("""
+            SELECT * FROM v_reportes_principal 
+            WHERE 1=1
+        """)
         
         # Apply filters
-        filters = [text("owner_id = :user_id")]
+        filters = []
         params = {"user_id": str(self.user_id)}
         
         if genre:
-            filters.append(text("game_genres = ANY(:genre)"))
+            filters.append("primary_genre = ANY(:genre) OR all_genres && :genre")
             params["genre"] = genre
             
         if developer:
-            filters.append(text("developer = ANY(:developer)"))
+            filters.append("developer_name = ANY(:developer)")
             params["developer"] = developer
             
         if platform:
-            filters.append(text("game_platforms = ANY(:platform)"))
+            filters.append("primary_platform = ANY(:platform) OR all_platforms && :platform")
             params["platform"] = platform
             
         if status:
-            filters.append(text("status = ANY(:status)"))
+            filters.append("report_status = ANY(:status)")
             params["status"] = status
             
         if year_from:
-            filters.append(text("release_year >= :year_from"))
+            filters.append("release_year >= :year_from")
             params["year_from"] = year_from
             
         if year_to:
-            filters.append(text("release_year <= :year_to"))
+            filters.append("release_year <= :year_to")
             params["year_to"] = year_to
             
         if search:
-            filters.append(text("search_vector @@ plainto_tsquery('english', :search)"))
+            filters.append("to_tsvector('english', game_name || ' ' || COALESCE(markdown_content, '') || ' ' || COALESCE(developer_name, '')) @@ plainto_tsquery('english', :search)")
             params["search"] = search
             
-        if len(filters) > 1:
-            query = query.where(and_(*filters))
+        if filters:
+            query = text(f"SELECT * FROM v_reportes_principal WHERE {' AND '.join(filters)}")
         
         # Count total
-        count_query = select(func.count()).select_from(
-            select(self._get_report_summary_query())
-            .where(and_(*filters) if len(filters) > 1 else filters[0])
-            .subquery()
-        )
+        count_query = text(f"SELECT COUNT(*) FROM ({str(query).replace('*', 'id')}) as subq").params(**params)
         
         # Apply sorting
-        if sort_by == "game.name":
-            query = query.order_by(
-                text(f"game_name {sort_dir}")
-            )
+        if sort_by in ["created_at", "game_name", "release_year", "updated_at", "confidence_score", "completed_at"]:
+            query = text(f"{str(query)} ORDER BY {sort_by} {sort_dir.upper()}")
         else:
-            query = query.order_by(text(f"{sort_by} {sort_dir}"))
+            query = text(f"{str(query)} ORDER BY created_at DESC")
         
         # Apply pagination
         offset = (page - 1) * page_size
-        query = query.offset(offset).limit(page_size)
+        query = text(f"{str(query)} LIMIT :page_size OFFSET :offset")
+        params["page_size"] = page_size
+        params["offset"] = offset
         
         # Execute queries
-        result = await self.db.execute(query)
-        items = result.scalars().all()
+        result = await self.db.execute(query, params)
+        items = result.fetchall()
         
-        count_result = await self.db.execute(count_query)
+        count_result = await self.db.execute(count_query, params)
         total = count_result.scalar()
         
         # Create pagination info
@@ -109,7 +108,7 @@ class ReportService:
         facets = await self._get_facets()
         
         return ReportListResponse(
-            items=[await self._dict_to_report(item) for item in items],
+            items=[await self._row_to_report(item) for item in items],
             pagination=pagination,
             facets=facets
         )
@@ -119,20 +118,25 @@ class ReportService:
         Get single report by ID
         GET /api/v1/reports/{report_id}
         """
-        query = select(self._get_report_detail_query()).where(
-            and_(
-                text("id = :report_id"),
-                text("owner_id = :user_id")
-            )
-        ).params(report_id=str(report_id), user_id=str(self.user_id))
+        query = text("""
+            SELECT * FROM reportes 
+            WHERE id = :report_id 
+        """).params(report_id=str(report_id))
         
         result = await self.db.execute(query)
         item = result.first()
         
         if not item:
             return None
+        
+        # Check if user has access (RLS will handle this automatically)
+        verify_query = text("SELECT 1 FROM reportes WHERE id = :report_id").params(report_id=str(report_id))
+        verify_result = await self.db.execute(verify_query)
+        
+        if not verify_result.first():
+            return None
             
-        return await self._dict_to_report(item[0])
+        return await self._row_to_report(item)
 
     async def get_report_content(self, report_id: UUID, format: str) -> Optional[Dict[str, Any]]:
         """
@@ -140,10 +144,11 @@ class ReportService:
         GET /api/v1/reports/{report_id}/content
         """
         query = text("""
-            SELECT id, game_name, markdown_url, json_url, json_rag_url
-            FROM report_details
-            WHERE id = :report_id AND owner_id = :user_id
-        """).params(report_id=str(report_id), user_id=str(self.user_id))
+            SELECT id, game_name, markdown_content, url_markdown, url_json, url_json_rag, url_pdf,
+                   json_generated, markdown_generated, json_rag_generated, pdf_generated
+            FROM reportes
+            WHERE id = :report_id
+        """).params(report_id=str(report_id))
         
         result = await self.db.execute(query)
         item = result.first()
@@ -151,17 +156,31 @@ class ReportService:
         if not item:
             return None
         
-        # Return appropriate content based on format
-        content_map = {
-            "markdown": item.markdown_url,
-            "json": item.json_url,
-            "json_rag": item.json_rag_url
-        }
+        # Check if format is available
+        available_formats = {}
+        if item.markdown_generated and item.url_markdown:
+            available_formats["markdown"] = {
+                "content_url": item.url_markdown,
+                "download_url": item.url_markdown,
+                "content": item.markdown_content  # Include actual content
+            }
+        if item.json_generated and item.url_json:
+            available_formats["json"] = {
+                "content_url": item.url_json,
+                "download_url": item.url_json
+            }
+        if item.json_rag_generated and item.url_json_rag:
+            available_formats["json_rag"] = {
+                "content_url": item.url_json_rag,
+                "download_url": item.url_json_rag
+            }
+        
+        if format not in available_formats:
+            return None
         
         return {
             "format": format,
-            "content_url": content_map.get(format),
-            "download_url": content_map.get(format)
+            **available_formats[format]
         }
 
     async def get_report_pdf_url(self, report_id: UUID) -> Optional[str]:
@@ -170,15 +189,15 @@ class ReportService:
         GET /api/v1/reports/{report_id}/download
         """
         query = text("""
-            SELECT pdf_url
-            FROM reports
-            WHERE id = :report_id AND owner_id = :user_id
-        """).params(report_id=str(report_id), user_id=str(self.user_id))
+            SELECT url_pdf, pdf_generated
+            FROM reportes
+            WHERE id = :report_id AND pdf_generated = TRUE
+        """).params(report_id=str(report_id))
         
         result = await self.db.execute(query)
         item = result.first()
         
-        return item.pdf_url if item else None
+        return item.url_pdf if item and item.pdf_generated and item.url_pdf else None
 
     async def update_report(self, report_id: UUID, tags: Optional[List[str]] = None, notes: Optional[str] = None) -> Optional[Report]:
         """
@@ -190,19 +209,29 @@ class ReportService:
         if tags is not None:
             update_fields["tags"] = tags
         if notes is not None:
-            update_fields["notes"] = notes
+            # Store notes in user_metadata_jsonb
+            update_fields["user_metadata_jsonb"] = text("""
+                COALESCE(user_metadata_jsonb, '{}') || jsonb_build_object('user_notes', :notes)
+            """)
         
         if not update_fields:
             return await self.get_report(report_id)
         
-        # Execute update with RLS constraints
-        values_str = ", ".join([f"{k} = :{k}" for k in update_fields.keys()])
-        params = {**update_fields, "report_id": str(report_id), "user_id": str(self.user_id)}
+        # Execute update with RLS constraints  
+        values_str = []
+        params = {"report_id": str(report_id)}
+        
+        if tags is not None:
+            values_str.append("tags = :tags")
+            params["tags"] = tags
+        if notes is not None:
+            values_str.append("user_metadata_jsonb = COALESCE(user_metadata_jsonb, '{}') || jsonb_build_object('user_notes', :notes)")
+            params["notes"] = notes
         
         query = text(f"""
-            UPDATE reports 
-            SET {values_str}, updated_at = NOW()
-            WHERE id = :report_id AND owner_id = :user_id
+            UPDATE reportes 
+            SET {', '.join(values_str)}, updated_at = NOW()
+            WHERE id = :report_id
             RETURNING *
         """).params(**params)
         
@@ -211,7 +240,7 @@ class ReportService:
         
         item = result.first()
         if item:
-            return await self.get_report(report_id)
+            return await self._row_to_report(item)
         return None
 
     async def delete_report(self, report_id: UUID) -> bool:
@@ -220,10 +249,10 @@ class ReportService:
         DELETE /api/v1/reports/{report_id}
         """
         query = text("""
-            DELETE FROM reports
-            WHERE id = :report_id AND owner_id = :user_id
+            DELETE FROM reportes
+            WHERE id = :report_id
             RETURNING id
-        """).params(report_id=str(report_id), user_id=str(self.user_id))
+        """).params(report_id=str(report_id))
         
         result = await self.db.execute(query)
         await self.db.commit()
@@ -241,140 +270,105 @@ class ReportService:
     # Helper Methods
     # ============================================================
 
-    def _get_report_summary_query(self):
-        """Base query for report summaries"""
-        return text("""
-            SELECT 
-                r.id, r.status, r.progress_percent, r.created_at, r.updated_at, r.tags,
-                g.id as game_id, g.name as game_name, g.slug as game_slug,
-                g.release_year, g.developer, g.cover_url,
-                ARRAY_AGG(DISTINCT gen.name) as game_genres,
-                ARRAY_AGG(DISTINCT plat.name) as game_platforms
-            FROM reports r
-            JOIN games g ON r.game_id = g.id
-            LEFT JOIN game_genres gg ON g.id = gg.game_id
-            LEFT JOIN genres gen ON gg.genre_id = gen.id
-            LEFT JOIN game_platforms gp ON g.id = gp.game_id
-            LEFT JOIN platforms plat ON gp.platform_id = plat.id
-            WHERE {where_clause}
-            GROUP BY r.id, g.id
-        """)
-
-    def _get_report_detail_query(self):
-        """Base query for detailed report info"""
-        return text("""
-            SELECT 
-                r.*, g.*, 
-                u.username as owner_username,
-                ARRAY_AGG(DISTINCT gen.name) as game_genres,
-                ARRAY_AGG(DISTINCT plat.name) as game_platforms
-            FROM reports r
-            JOIN games g ON r.game_id = g.id
-            JOIN users u ON r.owner_id = u.id
-            LEFT JOIN game_genres gg ON g.id = gg.game_id
-            LEFT JOIN genres gen ON gg.genre_id = gen.id
-            LEFT JOIN game_platforms gp ON g.id = gp.game_id
-            LEFT JOIN platforms plat ON gp.platform_id = plat.id
-            WHERE {where_clause}
-        """)
+    async def _row_to_report(self, row) -> Report:
+        """Convert database row to Report model"""
+        # Create Game object
+        game = Game(
+            id=str(row.game_id),
+            name=row.game_name,
+            slug=row.game_slug,
+            release_year=row.release_year,
+            developer=row.developer_name,
+            genres=row.all_genres if row.all_genres else [],
+            platforms=row.all_platforms if row.all_platforms else []
+        )
+        
+        # Create Report object
+        return Report(
+            id=row.id,
+            game=game,
+            status=row.report_status if hasattr(row, 'report_status') else 'completed',
+            current_phase=None,  # Not used in new schema
+            progress_percent=100 if (hasattr(row, 'report_status') and row.report_status == 'completed') else 0,
+            outputs={},  # URLs will be populated as needed
+            metadata={},  # Additional metadata from JSONB columns
+            summary=None,  # Could extract from executive_summary_jsonb
+            tags=row.tags if row.tags else [],
+            created_at=row.created_at,
+            updated_at=row.updated_at
+        )
 
     async def _get_facets(self) -> Facets:
-        """Getfacet counts"""
+        """Get facet counts for filtering"""
         
         # Status facets
         status_query = text("""
-            SELECT status, COUNT(*) as count, status as label
-            FROM reports 
-            WHERE owner_id = :user_id
-            GROUP BY status
-        """).params(user_id=str(self.user_id))
+            SELECT report_status as value, COUNT(*) as count, report_status as label
+            FROM reportes 
+            GROUP BY report_status
+            ORDER BY count DESC
+        """)
         
-        # Genre facets
+        # Genre facets  
         genre_query = text("""
-            SELECT gen.name as value, COUNT(r.id) as count, gen.name as label
-            FROM reports r
-            JOIN games g ON r.game_id = g.id
-            JOIN game_genres gg ON g.id = gg.game_id
-            JOIN genres gen ON gg.genre_id = gen.id
-            WHERE r.owner_id = :user_id
-            GROUP BY gen.name
-        """).params(user_id=str(self.user_id))
-        
-        # Developer facets
-        developer_query = text("""
-            SELECT g.developer as value, COUNT(r.id) as count, g.developer as label
-            FROM reports r
-            JOIN games g ON r.game_id = g.id
-            WHERE r.owner_id = :user_id AND g.developer IS NOT NULL
-            GROUP BY g.developer
-        """).params(user_id=str(self.user_id))
+            SELECT unnest(all_genres) as value, COUNT(*) as count, unnest(all_genres) as label
+            FROM reportes 
+            WHERE all_genres IS NOT NULL
+            GROUP BY unnest(all_genres)
+            ORDER BY count DESC
+        """)
         
         # Platform facets
         platform_query = text("""
-            SELECT plat.name as value, COUNT(DISTINCT r.id) as count, plat.name as label
-            FROM reports r
-            JOIN games g ON r.game_id = g.id
-            JOIN game_platforms gp ON g.id = gp.game_id
-            JOIN platforms plat ON gp.platform_id = plat.id
-            WHERE r.owner_id = :user_id
-            GROUP BY plat.name
-        """).params(user_id=str(self.user_id))
+            SELECT unnest(all_platforms) as value, COUNT(*) as count, unnest(all_platforms) as label
+            FROM reportes 
+            WHERE all_platforms IS NOT NULL
+            GROUP BY unnest(all_platforms)
+            ORDER BY count DESC
+        """)
+        
+        # Developer facets
+        developer_query = text("""
+            SELECT developer_name as value, COUNT(*) as count, developer_name as label
+            FROM reportes 
+            WHERE developer_name IS NOT NULL
+            GROUP BY developer_name
+            ORDER BY count DESC
+        """)
         
         # Year range
         year_query = text("""
             SELECT 
-                MIN(g.release_year) as min_year,
-                MAX(g.release_year) as max_year
-            FROM reports r
-            JOIN games g ON r.game_id = g.id
-            WHERE r.owner_id = :user_id AND g.release_year IS NOT NULL
-        """).params(user_id=str(self.user_id))
+                MIN(release_year) as min_year,
+                MAX(release_year) as max_year
+            FROM reportes 
+            WHERE release_year IS NOT NULL
+        """)
         
-        # Execute all queries
+        # Execute queries
         status_result = await self.db.execute(status_query)
-        genre_result = await self.db.execute(genre_query)
-        developer_result = await self.db.execute(developer_query)
+        genre_result = await self.db.execute(genre_query) 
         platform_result = await self.db.execute(platform_query)
+        developer_result = await self.db.execute(developer_query)
         year_result = await self.db.execute(year_query)
         
-        # Build facets
-        facets = Facets()
-        facets.genre = [FacetCount(value=row.value, count=row.count, label=row.label) for row in genre_result.fetchall()]
-        facets.developer = [FacetCount(value=row.value, count=row.count, label=row.label) for row in developer_result.fetchall()]
-        facets.platform = [FacetCount(value=row.value, count=row.count, label=row.label) for row in platform_result.fetchall()]
-        facets.status = [FacetCount(value=row.status, count=row.count, label=row.label) for row in status_result.fetchall()]
+        # Convert to FacetCount objects
+        status_facets = [FacetCount(value=row.value, count=row.count, label=row.label) for row in status_result.fetchall()]
+        genre_facets = [FacetCount(value=row.value, count=row.count, label=row.label) for row in genre_result.fetchall()]
+        platform_facets = [FacetCount(value=row.value, count=row.count, label=row.label) for row in platform_result.fetchall()]
+        developer_facets = [FacetCount(value=row.value, count=row.count, label=row.label) for row in developer_result.fetchall()]
         
-        year_data = year_result.first()
-        if year_data:
-            facets.year_range = {"min": year_data.min_year or 1980, "max": year_data.max_year or 2030}
-        else:
-            facets.year_range = {"min": 1980, "max": 2030}
-            
-        return facets
-
-    async def _dict_to_report(self, data: Any) -> Report:
-        """Convert database result to Report model"""
-        game = Game(
-            id=data.game_id if hasattr(data, 'game_id') else data.id,
-            name=data.game_name if hasattr(data, 'game_name') else data.name,
-            slug=data.slug,
-            release_year=data.release_year,
-            developer=data.developer,
-            genres=getattr(data, 'game_genres', []),
-            platforms=getattr(data, 'game_platforms', []),
-            cover_url=getattr(data, 'cover_url', None)
-        )
+        # Year range
+        year_row = year_result.first()
+        year_range = {
+            "min_year": year_row.min_year if year_row and year_row.min_year else 1970,
+            "max_year": year_row.max_year if year_row and year_row.max_year else datetime.now().year
+        }
         
-        return Report(
-            id=data.id,
-            game=game,
-            status=data.status,
-            current_phase=getattr(data, 'current_phase', None),
-            progress_percent=getattr(data, 'progress_percent', 0),
-            outputs={},
-            metadata={},
-            summary=None,
-            tags=getattr(data, 'tags', []),
-            created_at=data.created_at,
-            updated_at=data.updated_at
+        return Facets(
+            genre=genre_facets,
+            developer=developer_facets, 
+            platform=platform_facets,
+            status=status_facets,
+            year_range=year_range
         )
