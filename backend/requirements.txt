@@ -19,5 +19,6 @@ redis
 pydantic-settings
 jinja2>=3.1.0
 email-validator
+google-generativeai
 google-genai>=2.0.0
 tenacity>=8.2.0
