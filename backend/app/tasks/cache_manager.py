@@ -7,9 +7,9 @@ Maintains same cache patterns and TTL as Redis implementation.
 
 from datetime import timedelta
 from typing import Any, Optional
-from fastapi_cache2 import FastAPICache
-from fastapi_cache2.backends.in_memory import InMemoryBackend
-from fastapi_cache2.decorator import cache
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.inmemory import InMemoryBackend
+from fastapi_cache.decorator import cache
 
 # Cache configuration
 CACHE_TTL_SECONDS = 3600  # 1 hour TTL as per specification
@@ -50,7 +50,7 @@ class CacheManager:
     async def set(key: str, value: Any, expire: int = CACHE_TTL_SECONDS) -> None:
         """Set value in cache."""
         backend = FastAPICache.get_backend()
-        await backend.set(key, value, expire=timedelta(seconds=expire))
+        await backend.set(key, value, expire=expire)
     
     @staticmethod
     async def delete(key: str) -> None:
