@@ -1,0 +1,57 @@
+# ============================================================
+# Change Metadata: implement-ux-macro-skill
+# Type: Feature Implementation
+# Schema: spec-driven
+# ============================================================
+
+name: implement-ux-macro-skill
+type: implementation
+schema: spec-driven
+created_at: 2026-06-22T00:00:00Z
+workflow: spec-driven
+status: completed
+
+description: |
+  Implement the User Experience Macro-Skill (Phase 3 — Parallel Analysis).
+  Covers UI/UX, Accessibility, and Localization analysis using Gemini 2.5 Flash.
+  Includes BaseMacroSkill abstract base class, Celery task integration,
+  FastAPI endpoints, and reorganization of skills into services/macro_skills/.
+
+files:
+  created:
+    - backend/app/services/macro_skills/__init__.py
+    - backend/app/services/macro_skills/base_skill.py
+    - backend/app/services/macro_skills/user_experience/__init__.py
+    - backend/app/services/macro_skills/user_experience/skill.py
+    - backend/app/services/macro_skills/user_experience/schemas.py
+    - backend/app/tasks/skill_tasks.py
+    - backend/app/api/skills_routes.py
+    - backend/app/celery_app.py
+  modified:
+    - backend/requirements.txt
+    - backend/app/core/config.py
+    - backend/app/main.py
+    - backend/app/tasks/cache_manager.py
+
+affected_contracts:
+  - openspec/specs/macro_skills/ux_skill.yaml
+
+implementation:
+  skill_id: user_experience
+  model: gemini-2.5-flash
+  categories:
+    - ui_ux
+    - accessibility
+    - localization
+  endpoints:
+    - POST /api/skills/user-experience
+    - POST /api/skills/user-experience/sync
+    - GET  /api/skills/jobs/{job_id}
+  cache:
+    storage: fastapi in-memory
+    ttl_seconds: 86400
+    key_format: "skill:user_experience:{game_id}:{input_hash_16}"
+  task_queue: celery + redis broker
+
+approved_by: Tech Lead
+approved_at: 2026-06-22T00:00:00Z
