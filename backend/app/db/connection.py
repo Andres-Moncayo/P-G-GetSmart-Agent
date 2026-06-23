@@ -15,10 +15,10 @@ from app.core.config import ALGORITHM, SECRET_KEY
 load_dotenv()
 
 
-def _build_database_url() -> str:
+def _build_database_url() -> tuple[str, bool]:
     raw_url = os.getenv("DATABASE_URL") or os.getenv("POSTGREST_URL", "")
     if not raw_url:
-        return "postgresql+asyncpg://user:pass@localhost:5432/getsmarth"
+        return "postgresql+asyncpg://user:pass@localhost:5432/getsmarth", False
 
     if raw_url.startswith("postgresql+asyncpg://"):
         normalized = raw_url
