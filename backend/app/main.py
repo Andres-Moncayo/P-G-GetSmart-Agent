@@ -3,14 +3,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 from .api.routes import router
+from .api.skills_routes import skills_router
 from .tasks.cache_manager import CacheManager
 from .core.config import settings
 
-app = FastAPI(
-    title="GetSmart API",
-    description="Game Intelligence Library API",
-    version="1.0.0"
-)
+app = FastAPI(title="GetSmart API", version="3.0.0")
+
+app.include_router(router)
+app.include_router(skills_router, prefix='/api')
 
 # CORS middleware
 app.add_middleware(
@@ -20,9 +20,6 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "Authorization", "X-CSRF-Token"],
 )
-
-# Include routers
-app.include_router(router)
 
 # Exception handlers
 @app.exception_handler(SQLAlchemyError)
@@ -34,7 +31,6 @@ async def db_exception_handler(request: Request, exc: SQLAlchemyError):
 
 @app.on_event("startup")
 async def startup():
-    """Initialize FastAPI in-memory caching."""
     await CacheManager.init_cache()
 
 @app.get("/")

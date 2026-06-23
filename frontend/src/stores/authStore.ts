@@ -11,7 +11,8 @@ interface AuthStore extends AuthState {
   clearError: () => void;
   setLoading: (loading: boolean) => void;
   checkAuth: () => Promise<void>;
-  isInitialized: boolean; // Add initialization flag
+  isInitialized: boolean;
+  isLoggingOut: boolean;
 }
 
 export const useAuthStore = create<AuthStore>()(
@@ -22,16 +23,20 @@ export const useAuthStore = create<AuthStore>()(
       isLoading: false,
       error: null,
       isInitialized: false,
+      isLoggingOut: false,
 
       login: async (provider: string) => {
         set({ isLoading: true, error: null });
         
         try {
           if (provider === 'demo') {
-            // Handle demo login with apiClient (which has withCredentials: true)
-            await apiClient.demoLogin();
-            // Verify auth state after login
-            await get().checkAuth();
+            const data = await apiClient.demoLogin();
+            if (data?.user) {
+              get().setUser(data.user);
+            } else {
+              set({ isLoading: false });
+              await get().checkAuth();
+            }
           } else {
             // Handle SSO login
             const data = await apiClient.login(provider);
@@ -51,31 +56,41 @@ export const useAuthStore = create<AuthStore>()(
 
       demoLogin: async () => {
         set({ isLoading: true, error: null });
-        
+
         try {
-          await apiClient.demoLogin();
-          // Verify auth state after demo login
-          await get().checkAuth();
+          const [data] = await Promise.all([
+            apiClient.demoLogin(),
+            new Promise(resolve => setTimeout(resolve, 3000)),
+          ]);
+          if (data?.user) {
+            get().setUser(data.user);
+          } else {
+            set({ isLoading: false });
+            await get().checkAuth();
+          }
         } catch (error) {
-          set({ 
+          set({
             error: error instanceof Error ? error.message : 'Demo login failed',
-            isLoading: false 
+            isLoading: false
           });
         }
       },
 
       logout: async () => {
+        set({ isLoggingOut: true });
         try {
-          await apiClient.logout();
-        } catch (error) {
-          console.error('Logout error:', error);
+          await Promise.all([
+            apiClient.logout().catch(() => {}),
+            new Promise(resolve => setTimeout(resolve, 2000)),
+          ]);
         } finally {
-          set({ 
-            user: null, 
-            isAuthenticated: false, 
+          set({
+            user: null,
+            isAuthenticated: false,
             error: null,
             isLoading: false,
-            isInitialized: true
+            isInitialized: true,
+            isLoggingOut: false,
           });
         }
       },

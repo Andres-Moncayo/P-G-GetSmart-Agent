@@ -50,7 +50,7 @@ class CacheManager:
     async def set(key: str, value: Any, expire: int = CACHE_TTL_SECONDS) -> None:
         """Set value in cache."""
         backend = FastAPICache.get_backend()
-        await backend.set(key, value, expire=timedelta(seconds=expire))
+        await backend.set(key, value, expire=expire)
     
     @staticmethod
     async def delete(key: str) -> None:

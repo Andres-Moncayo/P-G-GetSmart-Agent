@@ -55,9 +55,9 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, onL
 
   return (
     <>
-      {/* Backdrop */}
-      <div 
-        className="fixed inset-0 z-50 bg-black/50"
+      {/* Backdrop — transparent, just catches outside clicks */}
+      <div
+        className="fixed inset-0 z-50"
         onClick={onClose}
       />
       
