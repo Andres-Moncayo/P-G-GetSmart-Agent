@@ -23,7 +23,7 @@ CREATE EXTENSION IF NOT EXISTS "btree_gin";
 -- =====================================================
 -- TABLA 1: usuarios (Información básica + preferencias JSONB)
 -- =====================================================
-CREATE TABLE usuarios (
+CREATE TABLE users (
     -- Claves Primarias y Autenticación
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email VARCHAR(255) UNIQUE NOT NULL,
@@ -50,7 +50,7 @@ CREATE TABLE usuarios (
 CREATE TABLE roles (
     -- Claves Primarias
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+user_id UUID NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
     role_name VARCHAR(50) NOT NULL CHECK (role_name IN ('admin','developer', 'user')),
     
     -- Claves para filtros y administración
