@@ -12,4 +12,5 @@ app.include_router(skills_router, prefix='/api')
 @app.on_event("startup")
 async def startup():
     """Initialize FastAPI in-memory caching."""
-    await CacheManager.init_cache()
+    # Cache initialization pending
+    pass
