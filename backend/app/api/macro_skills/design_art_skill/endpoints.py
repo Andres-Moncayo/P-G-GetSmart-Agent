@@ -12,9 +12,9 @@ Author: GetSmart Team
 
 from fastapi import APIRouter
 
-from ...models.macro_skills.design_art_models import DesignArtInputModel, DesignArtOutputModel
-from ...services.macro_skills.design_art_skill.design_art_service import DesignArtService
-from ...services.macro_skills.design_art_skill.system_prompt import (
+from ....models.macro_skills.design_art_models import DesignArtInputModel, DesignArtOutputModel
+from ....services.macro_skills.design_art_skill.design_art_service import DesignArtService
+from ....services.macro_skills.design_art_skill.system_prompt import (
     GAMEPLAY_ANALYSIS_PROMPT,
     LEVEL_DESIGN_ANALYSIS_PROMPT,
     NARRATIVE_ANALYSIS_PROMPT,

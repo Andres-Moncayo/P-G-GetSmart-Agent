@@ -42,3 +42,5 @@ class Settings(BaseSettings):
 settings = Settings()
 
 GEMINI_API_KEY = settings.gemini_api_key
+SECRET_KEY = settings.jwt_secret
+ALGORITHM = settings.jwt_algorithm

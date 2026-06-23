@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional
 import google.generativeai as genai
 
-from ...models.macro_skills.design_art_models import (
+from ....models.macro_skills.design_art_models import (
     DesignArtInputModel, DesignArtOutputModel, DesignArtMetadata,
     Analysis, GameplayAnalysis, LevelDesignAnalysis, NarrativeAnalysis,
     ArtDirectionAnalysis, SoundDesignAnalysis, Summary, Confidence,
@@ -105,7 +105,7 @@ class DesignArtService:
         # Fallback analysis
         return self._create_fallback_gameplay_analysis(context)
 
-def _create_gameplay_prompt(self, context: Dict[str, Any]) -> str:
+    def _create_gameplay_prompt(self, context: Dict[str, Any]) -> str:
         """Create a prompt for gameplay analysis."""
         from .system_prompt import GAMEPLAY_ANALYSIS_PROMPT
         
