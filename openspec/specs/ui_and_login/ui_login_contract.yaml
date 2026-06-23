@@ -10,14 +10,17 @@ schema: spec-driven
 artifact:
   id: ui_login_contract
   name: UI & Login Contract
-  version: "1.0.0"
+  version: "2.0.0"
   author: GetSmart Team
   created_at: "2026-06-17"
-  status: draft
+  updated_at: "2026-06-23"
+  status: active
   description: |
-    Defines the authentication, navigation, and user profile contracts
-    for the GetSmart frontend. Covers SSO login, session management,
-    topbar navigation, and profile modal interactions.
+    Defines the authentication, navigation, user profile, and dashboard contracts
+    for the GetSmart frontend. Covers SSO login, session management, topbar
+    navigation, profile modal, the reports catalog (50 games with functional
+    filters and search), the In Pipeline section, report dates on cards, and the
+    ReportPreviewModal. Implemented via change enhance-dashboard-reports.
 
 # ============================================================
 # 1. DESIGN SYSTEM REFERENCE
@@ -32,10 +35,10 @@ design_system:
       hover: "#222222"
       border: "#2A2A2A"
       border_hover: "#3A3A3A"
-      accent: "#3B82F6"
-      accent_light: "#60A5FA"
-      accent_dark: "#2563EB"
-      accent_glow: "rgba(59,130,246,0.15)"
+      accent: "#6366F1"          # Indigo — implemented color (overrides draft blue)
+      accent_light: "#818CF8"
+      accent_dark: "#4F46E5"
+      accent_glow: "rgba(99,102,241,0.15)"
       secondary: "#8B5CF6"
       secondary_light: "#A78BFA"
       text_primary: "#F5F5F5"
@@ -441,6 +444,83 @@ endpoints:
                   type: string
                   format: date-time
 
+  # ---- Reports / Dashboard ----
+  - path: GET /api/v1/reports
+    summary: "List all game reports (completed + in-pipeline)"
+    tags: ["reports"]
+    security:
+      - cookieAuth: []
+    query_parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: ["completed", "processing", "queued"]
+      - name: genre
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: developer
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: platform
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: since
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+          description: "ISO timestamp — return reports created after this date"
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: ["recent", "alpha", "year"]
+          default: "recent"
+    responses:
+      "200":
+        description: "Array of Report objects"
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/data_schemas/Report"
+      "401":
+        description: "Unauthorized"
+
+  - path: GET /api/v1/reports/{report_id}
+    summary: "Get full ReportPreview for a specific game"
+    tags: ["reports"]
+    security:
+      - cookieAuth: []
+    parameters:
+      - name: report_id
+        in: path
+        required: true
+        schema:
+          type: integer
+    responses:
+      "200":
+        description: "Full ReportPreview including MacroSkill scores"
+        content:
+          application/json:
+            schema:
+              $ref: "#/data_schemas/ReportPreview"
+      "401":
+        description: "Unauthorized"
+      "404":
+        description: "Report not found"
+
   - path: DELETE /api/v1/me/api-keys/{key_id}
     summary: "Revoke API key"
     tags: ["profile"]
@@ -630,6 +710,135 @@ components:
             style: "text-danger hover:bg-danger/10"
             action: "logout"
 
+  # ---- Dashboard ----
+  dashboard:
+    layout: "two_column"
+    sidebar:
+      width: "256px"
+      position: "left"
+      background: "surface"
+      border_right: "border"
+      sections:
+        - id: genre
+          label: "Genre"
+          type: "multi_checkbox"
+          component: "FilterCheckbox"
+          checkbox_unchecked: "bg-[#222222] border-[#3A3A3A]"
+          checkbox_checked: "bg-accent border-accent"
+          checkbox_icon: "fas fa-check text-white text-[8px]"
+
+        - id: developer
+          label: "Developer"
+          type: "multi_checkbox"
+          component: "FilterCheckbox"
+
+        - id: platform
+          label: "Platform"
+          type: "multi_checkbox"
+          component: "FilterCheckbox"
+          platform_icons:
+            PC: "fab fa-windows"
+            PlayStation: "fab fa-playstation"
+            Xbox: "fab fa-xbox"
+            Nintendo: "fas fa-gamepad"
+            Mobile: "fas fa-mobile-alt"
+            "Epic Games": "fas fa-store"
+
+        - id: date_created
+          label: "Date Created"
+          type: "single_radio"
+          component: "DateRadio"
+          radio_selected: "bg-accent border-accent"
+          radio_unselected: "bg-[#222222] border-[#3A3A3A]"
+          options:
+            - label: "Today"
+              days: 1
+            - label: "Last 7 days"
+              days: 7
+            - label: "Last 30 days"
+              days: 30
+            - label: "Last 3 months"
+              days: 90
+            - label: "Last year"
+              days: 365
+          note: "Clicking selected option deselects it (toggle to All Time)"
+
+    search_bar:
+      placeholder: "Search games, developers..."
+      type: "real_time"
+      debounce_ms: 0
+      scope: ["title", "developer"]
+      covers: ["completed", "in_pipeline"]
+
+    sort_modes:
+      - key: "recent"
+        label: "Most Recent"
+        field: "REPORT_DATES[id]"
+        direction: "desc"
+      - key: "alpha"
+        label: "A–Z"
+        field: "title"
+        direction: "asc"
+      - key: "year"
+        label: "Release Year"
+        field: "year"
+        direction: "desc"
+
+    in_pipeline_section:
+      position: "above_completed_grid"
+      visibility: "when game has status=processing"
+      header:
+        pulse_dot: "warning"
+        label: "In Pipeline"
+        count_badge: true
+      card_component: "InPhaseCard"
+      card_layout: "horizontal"
+      card_fields:
+        - thumbnail: "w-28 flex-shrink-0 object-cover"
+        - title: "font-semibold text-primary"
+        - developer: "text-sm text-muted"
+        - report_date: "calendar icon + fmtDate(REPORT_DATES[id])"
+        - phase_badge: "Phase X/4 — bg-warning/20 text-warning"
+        - phase_name: "Ingestion | Consolidation | Analysis | Synthesis"
+        - phase_bar: "4 segments: completed=amber, active=pulse amber, pending=elevated"
+        - progress_bar: "thin bar showing overall percent"
+      on_click: "open ReportPreviewModal"
+
+    completed_section:
+      header:
+        dot: "success"
+        label: "Completed Reports"
+        counter: "N of M (filtered / total)"
+      card_component: "ReportCard"
+      grid: "auto-fill minmax(280px, 1fr)"
+      card_fields:
+        - genre_badge: "bg-accent/20 text-accent-light text-xs"
+        - status_dot: "success"
+        - title: "font-semibold text-primary"
+        - developer_year: "text-sm text-muted"
+        - report_date: "calendar icon + fmtDate(REPORT_DATES[id])"
+        - platform_icons: "text-muted text-sm"
+      image_fallback: "picsum.photos/seed/{id}/400/225"
+      on_click: "open ReportPreviewModal"
+      empty_state:
+        icon: "fas fa-search"
+        text: "No reports match your filters"
+        action: "Clear all"
+
+    filter_composition:
+      logic: "AND across all active dimensions"
+      search_with_filters: true
+      clear_button: "appears when any filter or dateFilter is active"
+
+    data_sources:
+      catalog: "frontend/src/data/gameData.ts"
+      types: "frontend/src/types/game.ts"
+      image_strategy:
+        steam: "shared.akamai.steamstatic.com/store_item_assets/steam/apps/{id}/header.jpg"
+        epic: "cdn2.unrealengine.com (via store-content.ak.epicgames.com content API)"
+        console_exclusive: "upload.wikimedia.org (via Wikipedia REST summary API)"
+        fallback: "picsum.photos/seed/{id}"
+
 # ============================================================
 # 6. STATE MANAGEMENT
 # ============================================================
@@ -675,6 +884,47 @@ state:
       - name: "toggleProfileModal"
       - name: "setActiveNavItem"
         parameters: ["item: string"]
+
+  dashboard_store:
+    library: "react_local_state"
+    persist: "none"
+    note: "Implemented as useState/useMemo inside Dashboard.tsx"
+    fields:
+      - name: "search"
+        type: "string"
+        default: '""'
+      - name: "sortKey"
+        type: '"recent" | "alpha" | "year"'
+        default: '"recent"'
+      - name: "genreFilters"
+        type: "Set<string>"
+        default: "new Set()"
+      - name: "devFilters"
+        type: "Set<string>"
+        default: "new Set()"
+      - name: "platformFilters"
+        type: "Set<string>"
+        default: "new Set()"
+      - name: "dateFilter"
+        type: "number | null"
+        default: "null"
+        description: "Number of days lookback; null means All Time"
+      - name: "showPreview"
+        type: "number | null"
+        default: "null"
+        description: "ID of the report whose ReportPreviewModal is open"
+    derived:
+      - name: "filteredReports"
+        type: "Report[]"
+        memo: "useMemo"
+        logic: "excludes status=processing, applies search+genre+dev+platform+date, then sorts"
+      - name: "inPhaseReports"
+        type: "Report[]"
+        memo: "useMemo"
+        logic: "status=processing filtered by search"
+      - name: "hasFilters"
+        type: "boolean"
+        logic: "any filter set non-empty OR dateFilter !== null"
 
 # ============================================================
 # 7. ERROR HANDLING
@@ -741,3 +991,124 @@ security:
       window: "15 minutes"
       max_requests: 5
       block_duration: "30 minutes"
+
+# ============================================================
+# 9. DATA SCHEMAS (Frontend types — frontend/src/types/game.ts)
+# ============================================================
+data_schemas:
+  ReportStatus:
+    type: string
+    enum: ["completed", "processing", "queued"]
+
+  Report:
+    $id: "https://getsmart.dev/schemas/v1/report"
+    type: object
+    required: ["id", "title", "developer", "year", "genre", "status", "platforms", "time", "image"]
+    properties:
+      id:
+        type: integer
+        description: "Unique report identifier"
+      title:
+        type: string
+      developer:
+        type: string
+      year:
+        type: integer
+      genre:
+        type: string
+      status:
+        $ref: "#/data_schemas/ReportStatus"
+      platforms:
+        type: array
+        items:
+          type: string
+          enum: ["PC", "PlayStation", "Xbox", "Nintendo", "Mobile", "Epic Games"]
+      time:
+        type: string
+        description: >
+          For completed: human-readable duration (e.g. "2h ago").
+          For processing: "Phase X/4" string parsed to drive InPhaseCard UI.
+      image:
+        type: string
+        description: "Path relative to /public (e.g. /games/elden-ring.jpg)"
+      progress:
+        type: integer
+        minimum: 0
+        maximum: 100
+        description: "Only present when status=processing. Overall pipeline %."
+
+  MacroSkill:
+    $id: "https://getsmart.dev/schemas/v1/macro-skill"
+    type: object
+    required: ["name", "icon", "score", "color", "textColor", "summary", "strengths", "weaknesses"]
+    properties:
+      name:
+        type: string
+        enum: ["Diseño & Arte", "UX", "Tecnología & Sistemas", "Estrategia & Mercado"]
+      icon:
+        type: string
+        description: "FontAwesome class (e.g. fas fa-palette)"
+      score:
+        type: integer
+        minimum: 0
+        maximum: 100
+      color:
+        type: string
+        description: "Tailwind bg class for the skill chip"
+      textColor:
+        type: string
+        description: "Tailwind text class for the skill chip"
+      summary:
+        type: string
+      strengths:
+        type: array
+        items:
+          type: string
+      weaknesses:
+        type: array
+        items:
+          type: string
+
+  ReportPreview:
+    $id: "https://getsmart.dev/schemas/v1/report-preview"
+    type: object
+    required: ["overallScore", "tag", "summary", "macroSkills", "market"]
+    properties:
+      overallScore:
+        type: integer
+        minimum: 0
+        maximum: 100
+      tag:
+        type: string
+        description: "Qualitative label (e.g. 'Outstanding', 'Very Good')"
+      summary:
+        type: string
+        description: "One-paragraph executive summary"
+      macroSkills:
+        type: array
+        minItems: 4
+        maxItems: 4
+        items:
+          $ref: "#/data_schemas/MacroSkill"
+      market:
+        type: object
+        description: "Key-value market metrics (e.g. Revenue, Players, Score)"
+        additionalProperties:
+          type: string
+
+  REPORT_DATES:
+    description: "Lookup Record<number, string> mapping report id → ISO 8601 creation timestamp"
+    type: object
+    additionalProperties:
+      type: string
+      format: date-time
+    note: >
+      Stored in gameData.ts as a separate object (not a field on Report) to avoid
+      modifying all 50 Report entries. Processing games always receive today's date.
+
+  PipelinePhase:
+    description: "Names of the 4 analysis phases shown in InPhaseCard"
+    type: array
+    items:
+      type: string
+    example: ["Ingestion", "Consolidation", "Analysis", "Synthesis"]
