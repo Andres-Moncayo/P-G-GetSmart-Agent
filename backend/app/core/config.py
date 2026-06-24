@@ -5,6 +5,9 @@ from typing import List
 class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql://user:password@localhost/getsmart"
+    
+    # Debug
+    debug: bool = False
 
     # JWT
     jwt_secret: str = "your-super-secret-key"
