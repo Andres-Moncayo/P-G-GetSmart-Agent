@@ -4,21 +4,93 @@ schema: spec-driven
 # Artifact: scraper_contract.yaml
 # Domain: Ingestion (Phase 1)
 # Status: draft
+# Updated: 2026-06-24
 # ============================================================
 
 artifact:
   id: scraper_contract
   name: Scraper & Ingestion Contract
-  version: "1.0.0"
+  version: "1.1.0"
   author: GetSmart Team
   created_at: "2026-06-17"
+  updated_at: "2026-06-24"
   status: draft
   description: |
     Defines the programmatic ingestion pipeline that extracts structured and
-    semantic data for a confirmed game. Uses 4 parallel Celery workers — one
-    per Macro-Skill — each querying direct APIs (IGDB, RAWG, Steam, SteamSpy)
-    and Tavily with domain-specific queries. Outputs 4 Mini-Context JSONs
-    that are available immediately and later consolidated into Master-JSON.
+    semantic data for a confirmed game. Uses FastAPI with async/await and
+    BackgroundTasks for parallel execution — one internal scraper per Macro-Skill.
+    Each scraper queries direct APIs (IGDB, RAWG, Steam, SteamSpy) and Tavily
+    with domain-specific queries. Outputs 4 Mini-Context JSONs that are available
+    immediately and later consolidated into Master-JSON.
+
+# ============================================================
+# 0. ARCHITECTURAL DECISION RECORDS (ADRs)
+# ============================================================
+architectural_decisions:
+  adr_001_parallelism_by_macro_skill:
+    title: "Parallelism by Macro-Skill via FastAPI BackgroundTasks"
+    context: "Should we search all data at once or split by domain?"
+    decision: "4 parallel scrapers executed via asyncio.gather() within FastAPI BackgroundTasks."
+    rationale:
+      - "Latency: ~4x faster than sequential execution"
+      - "Relevance: Domain-specific queries yield better evidence"
+      - "Token efficiency: Each skill receives only relevant context"
+      - "Fault tolerance: Isolated failure per scraper"
+      - "Scalability: Add scrapers without architecture changes"
+    trade_offs:
+      - "Tavily credits similar or slightly higher (offset by fewer LLM tokens in Phase 3)"
+      - "More orchestration complexity (mitigated by FastAPI + asyncio)"
+
+  adr_002_no_llm_in_phase_1:
+    title: "No LLM in Phase 1"
+    context: "Previous project used Gemini to analyze Tavily results."
+    decision: "Phase 1 uses NO LLM. Only APIs + Tavily."
+    rationale:
+      - "Determinism: APIs return predictable structured data"
+      - "Cost: Avoid unnecessary LLM tokens"
+      - "Speed: APIs are faster than LLM calls"
+      - "Separation of concerns: Phase 1 extracts, Phase 3 analyzes"
+
+  adr_003_include_steamspy:
+    title: "Include SteamSpy as Direct Source"
+    context: "SteamSpy provides sales estimates not available in official APIs."
+    decision: "Yes, include SteamSpy as a direct source."
+    rationale:
+      - "Sales estimates critical for Strategy & Market"
+      - "Community tags useful for player perception"
+      - "CCU for retention metrics"
+      - "Price history for monetization analysis"
+    risks:
+      - "Estimated data, not official → Document confidence level"
+      - "Strict rate limit (1 req/s) → Implement throttling"
+      - "API instability → Fallback to Steam reviews proxy"
+
+  adr_004_single_service_with_internal_scrapers:
+    title: "Single FastAPI Service with 4 Internal Scrapers"
+    context: "4 separate files vs one file with 4 classes?"
+    decision: "Single FastAPI ScraperService with 4 internal async methods/classes."
+    rationale:
+      - "Cohesion: Shared base logic (Tavily, rate limiting, caching)"
+      - "Maintainability: Single entry point for debugging"
+      - "Centralized config: One YAML for all scrapers"
+      - "Deployment: One module to deploy"
+    trade_offs:
+      - "Larger file → Document with docstrings"
+      - "Less modularity → Use well-separated internal classes"
+
+  adr_005_fastapi_async_over_celery:
+    title: "FastAPI async/await + BackgroundTasks over Celery"
+    context: "Need background task execution without Redis infrastructure."
+    decision: "Use FastAPI BackgroundTasks and asyncio.gather() instead of Celery workers."
+    rationale:
+      - "No Redis dependency → Simpler infrastructure"
+      - "Native async/await → Better performance for I/O-bound API calls"
+      - "FastAPI BackgroundTasks → Built-in background execution"
+      - "In-memory cache sufficient for single-instance deployment"
+    trade_offs:
+      - "No distributed task queue → Single node only"
+      - "BackgroundTasks fire-and-forget → Use status polling for long operations"
+      - "In-memory cache lost on restart → Acceptable for Phase 1"
 
 # ============================================================
 # 1. FLOW DIAGRAM (Mermaid)
@@ -26,13 +98,13 @@ artifact:
 flow:
   mermaid: |
     flowchart TD
-      A[confirmed_game input] --> B[Fetch Hard Data APIs]
-      B --> C[game_metadata.json]
-      C --> D{Dispatch 4 Celery Workers}
-      D --> E[Worker 1: Design & Art]
-      D --> F[Worker 2: User Experience]
-      D --> G[Worker 3: Technology & Systems]
-      D --> H[Worker 4: Strategy & Market]
+      A[confirmed_game input] --> B[FastAPI POST /scrape]
+      B --> C{BackgroundTasks}
+      C --> D[asyncio.gather 4 scrapers]
+      D --> E[Scraper 1: Design & Art]
+      D --> F[Scraper 2: User Experience]
+      D --> G[Scraper 3: Technology & Systems]
+      D --> H[Scraper 4: Strategy & Market]
       E --> I[context_design_art.json]
       F --> J[context_user_experience.json]
       G --> K[context_technology_systems.json]
@@ -42,6 +114,7 @@ flow:
       K --> M
       L --> M
       M --> N[master_context.json]
+      N --> O[POST /webhook to Phase 3]
 
 # ============================================================
 # 2. INPUT CONTRACT
@@ -92,12 +165,41 @@ input:
       default: []
 
 # ============================================================
-# 3. WORKERS CONFIGURATION
+# 2.1 STEAM_APP_ID NULL HANDLING
 # ============================================================
-workers:
-  worker_1_design_art:
+steam_app_id_null_handling:
+  description: |
+    When steam_app_id is null, scrapers that depend on Steam APIs
+    must skip Steam-specific data sources gracefully.
+  behavior_per_scraper:
+    design_art:
+      steam_web_api: "SKIP — achievements_schema will be empty array []"
+      impact: "Low — IGDB/RAWG cover most design data"
+    user_experience:
+      steam_storefront: "SKIP — system_requirements, controller_support, etc. will be null"
+      steam_reviews: "SKIP — steam_reviews_sample will have zero counts and empty array"
+      impact: "Medium — lose platform-specific UX data"
+    technology_systems:
+      steam_storefront: "SKIP — pc/mac/linux_requirements will be null"
+      steam_web_api: "SKIP — current_player_count will be null"
+      impact: "Medium — lose system requirements and live player count"
+    strategy_market:
+      steam_storefront: "SKIP — price_overview, recommendations, release_date will be null"
+      steam_web_api: "SKIP — current_player_count will be null"
+      steamspy: "SKIP — all SteamSpy fields will be null"
+      impact: "High — lose pricing, sales estimates, and Steam-specific market data"
+  fallback:
+    description: "When Steam data is unavailable, rely on IGDB + RAWG + Tavily semantic data to compensate"
+    confidence_adjustment: "Reduce confidence_score by 0.15 when steam_app_id is null"
+
+# ============================================================
+# 3. SCRAPER CONFIGURATION (FastAPI Internal Scrapers)
+# ============================================================
+scrapers:
+  scraper_1_design_art:
     macro_skill: "Design and Art"
-    worker_id: "scraper_design_art"
+    scraper_id: "scraper_design_art"
+    execution: "async def scrape_design_art(game_metadata: dict) -> dict"
     description: |
       Extracts gameplay, level design, narrative, art direction, and sound design
       data. Combines hard data from APIs with semantic searches specialized in
@@ -154,6 +256,7 @@ workers:
           - achievements_schema
           - achievement_descriptions
           - achievement_icons
+        skip_if_null: ["steam_app_id"]
 
     tavily_queries:
       base_template: '{game_name} ({release_year})'
@@ -203,7 +306,14 @@ workers:
             - "r/gamedev"
             - "r/games"
             - "r/truegaming"
-            - "r/{game_name_normalized}"
+          dynamic_subreddit:
+            template: "r/{game_name_normalized}"
+            fallback: "SKIP if subreddit does not exist or returns no results"
+            game_name_normalized_rules:
+              - "Lowercase"
+              - "Remove special characters except alphanumeric and underscore"
+              - "Replace spaces with underscores or remove them"
+              - "Examples: 'Elden Ring' → 'eldenring' or 'elden_ring'"
         - name: "youtube"
           query_suffix: "site:youtube.com (review OR analysis OR critique)"
         - name: "blogs"
@@ -215,9 +325,10 @@ workers:
       file: "context_design_art.json"
       schema: "mini_context_design_art"
 
-  worker_2_user_experience:
+  scraper_2_user_experience:
     macro_skill: "User Experience"
-    worker_id: "scraper_user_experience"
+    scraper_id: "scraper_user_experience"
+    execution: "async def scrape_user_experience(game_metadata: dict) -> dict"
     description: |
       Extracts UI/UX, accessibility, and localization data. Focuses on player
       experience from interface to inclusion of accessibility options.
@@ -252,6 +363,7 @@ workers:
           - full_controller_support
           - steam_cloud
           - steam_achievements
+        skip_if_null: ["steam_app_id"]
 
       - name: "Steam Reviews API"
         endpoint: "https://store.steampowered.com/appreviews/{steam_app_id}"
@@ -267,6 +379,7 @@ workers:
           - playtime_at_review
           - timestamp_created
           - language
+        skip_if_null: ["steam_app_id"]
 
     tavily_queries:
       base_template: '{game_name} ({release_year})'
@@ -304,6 +417,7 @@ workers:
             - "r/pcgaming"
         - name: "steam_reviews"
           query_suffix: "site:store.steampowered.com/appreviews"
+          skip_if_null: ["steam_app_id"]
         - name: "stackoverflow"
           query_suffix: "site:stackoverflow.com (bug OR issue OR problem)"
         - name: "forums"
@@ -313,9 +427,10 @@ workers:
       file: "context_user_experience.json"
       schema: "mini_context_user_experience"
 
-  worker_3_technology_systems:
+  scraper_3_technology_systems:
     macro_skill: "Technology and Systems"
-    worker_id: "scraper_technology_systems"
+    scraper_id: "scraper_technology_systems"
+    execution: "async def scrape_technology_systems(game_metadata: dict) -> dict"
     description: |
       Extracts technology/performance, multiplayer/social, and platforms/distribution
       data. Focuses on game architecture, engines used, performance, and multiplayer
@@ -371,6 +486,7 @@ workers:
           - genres
           - developers
           - publishers
+        skip_if_null: ["steam_app_id"]
 
       - name: "Steam Web API"
         endpoint: "https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1"
@@ -382,6 +498,11 @@ workers:
           backoff: "linear"
         fields:
           - current_player_count
+        skip_if_null: ["steam_app_id"]
+        note: |
+          This endpoint returns ONLY current_player_count (live players).
+          It does NOT return peak_player_count. For historical peak data,
+          use SteamDB or Steam Charts as semantic sources via Tavily.
 
     tavily_queries:
       base_template: '{game_name} ({release_year})'
@@ -430,9 +551,10 @@ workers:
       file: "context_technology_systems.json"
       schema: "mini_context_technology_systems"
 
-  worker_4_strategy_market:
+  scraper_4_strategy_market:
     macro_skill: "Strategy and Market"
-    worker_id: "scraper_strategy_market"
+    scraper_id: "scraper_strategy_market"
+    execution: "async def scrape_strategy_market(game_metadata: dict) -> dict"
     description: |
       Extracts audience, business model, retention/live ops, production/business,
       marketing, and cultural impact data. Focuses on market analysis and commercial
@@ -492,6 +614,7 @@ workers:
           - recommendations
           - release_date
           - coming_soon
+        skip_if_null: ["steam_app_id"]
 
       - name: "Steam Web API"
         endpoint: "https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1"
@@ -503,7 +626,8 @@ workers:
           backoff: "linear"
         fields:
           - current_player_count
-          - peak_player_count
+        skip_if_null: ["steam_app_id"]
+        note: "Returns ONLY current_player_count. NO peak_player_count available."
 
       - name: "SteamSpy API"
         endpoint: "https://steamspy.com/api.php"
@@ -523,6 +647,11 @@ workers:
           - negative_reviews
           - price
           - discount
+        skip_if_null: ["steam_app_id"]
+        risk_note: |
+          SteamSpy is a third-party service with occasional downtime.
+          If unavailable, fallback to Steam reviews as popularity proxy.
+          All SteamSpy data is estimated, not official.
 
     tavily_queries:
       base_template: '{game_name} ({release_year})'
@@ -594,7 +723,116 @@ workers:
       schema: "mini_context_strategy_market"
 
 # ============================================================
-# 4. API CONFIGURATION
+# 4. FASTAPI SERVICE ARCHITECTURE
+# ============================================================
+fastapi_service:
+  name: "ScraperService"
+  module: "scraper_service.py"
+  framework: "FastAPI"
+  concurrency_model: "async/await + asyncio.gather()"
+
+  endpoints:
+    - path: "POST /scrape"
+      description: "Trigger scraping for a confirmed game"
+      request_body: "confirmed_game (Input Contract)"
+      response:
+        status: 202 Accepted
+        body:
+          scrape_id: "uuid"
+          game_id: "uuid"
+          status: "processing"
+          message: "Scraping initiated. Poll GET /scrape/{scrape_id}/status for results."
+      execution_flow:
+        - "Validate confirmed_game input"
+        - "Check cache for existing game_metadata"
+        - "If miss: asyncio.gather() to fetch all hard data APIs in parallel"
+        - "Store game_metadata.json"
+        - "Launch BackgroundTasks with asyncio.gather(4 scrapers)"
+        - "Return 202 with scrape_id immediately"
+
+    - path: "GET /scrape/{scrape_id}/status"
+      description: "Poll scraping status and retrieve results when complete"
+      response:
+        status: 200 OK
+        body:
+          scrape_id: "uuid"
+          game_id: "uuid"
+          status: "processing | completed | failed | partial"
+          progress:
+            game_metadata: "pending | completed | failed"
+            scraper_design_art: "pending | completed | failed"
+            scraper_user_experience: "pending | completed | failed"
+            scraper_technology_systems: "pending | completed | failed"
+            scraper_strategy_market: "pending | completed | failed"
+            master_json: "pending | completed | failed"
+          results:
+            game_metadata: "object | null"
+            mini_contexts:
+              design_art: "object | null"
+              user_experience: "object | null"
+              technology_systems: "object | null"
+              strategy_market: "object | null"
+            master_context: "object | null"
+          errors:
+            - scraper_id: "string"
+              error_type: "string"
+              message: "string"
+
+    - path: "GET /scrape/{scrape_id}/mini-context/{scraper_id}"
+      description: "Retrieve a specific Mini-Context as soon as it's available"
+      response:
+        status: 200 OK
+        body: "mini_context JSON"
+
+  background_execution:
+    description: |
+      FastAPI BackgroundTasks executes the scraping pipeline after
+      returning 202 to the client. Uses asyncio.gather() for parallelism.
+    flow:
+      - "Background task receives scrape_id + game_metadata"
+      - "Launch 4 scrapers concurrently via asyncio.gather()"
+      - "Each scraper is an async function that calls APIs + Tavily"
+      - "As each scraper completes, its Mini-Context is saved and available"
+      - "When all complete (or timeout), consolidate Master-JSON"
+      - "POST to Phase 3 webhook with master_context.json"
+    fault_tolerance:
+      - "If one scraper fails, others continue"
+      - "Failed scraper returns null for its Mini-Context"
+      - "Master-JSON built with successful scrapers only"
+      - "Status endpoint reflects partial completion"
+
+  code_structure:
+    description: "Recommended Python module structure"
+    files:
+      - "scraper_service.py"
+        content: "FastAPI app, endpoints, BackgroundTasks orchestration"
+      - "scrapers/base_scraper.py"
+        content: "Abstract base class with shared Tavily, cache, retry logic"
+      - "scrapers/design_art_scraper.py"
+        content: "Scraper 1 implementation"
+      - "scrapers/user_experience_scraper.py"
+        content: "Scraper 2 implementation"
+      - "scrapers/technology_systems_scraper.py"
+        content: "Scraper 3 implementation"
+      - "scrapers/strategy_market_scraper.py"
+        content: "Scraper 4 implementation"
+      - "clients/igdb_client.py"
+        content: "Async IGDB API client with OAuth2"
+      - "clients/rawg_client.py"
+        content: "Async RAWG API client"
+      - "clients/steam_client.py"
+        content: "Async Steam Storefront + Web API client"
+      - "clients/steamspy_client.py"
+        content: "Async SteamSpy client with rate limiting"
+      - "clients/tavily_client.py"
+        content: "Async Tavily client with query builder"
+      - "cache/memory_cache.py"
+        content: "In-memory cache implementation"
+      - "models/schemas.py"
+        content: "Pydantic models for all inputs/outputs"
+
+# ============================================================
+# 5. API CONFIGURATION
 # ============================================================
 api_config:
   igdb:
@@ -653,6 +891,9 @@ api_config:
       backoff: "exponential"
       initial_delay_ms: 2000
       max_delay_ms: 30000
+    risk_note: |
+      Third-party service. Occasional downtime or data staleness.
+      Implement graceful degradation when unavailable.
 
   tavily:
     base_url: "https://api.tavily.com"
@@ -670,9 +911,14 @@ api_config:
       include_raw_content: true
       topic: "general"
       max_results_per_query: 5
+    circuit_breaker:
+      enabled: true
+      monthly_limit: 1000
+      warning_threshold: 800
+      action_at_limit: "Reduce max_results_per_query to 3 and log alert"
 
 # ============================================================
-# 5. OUTPUT SCHEMAS
+# 6. OUTPUT SCHEMAS
 # ============================================================
 output_schemas:
   mini_context_design_art:
@@ -684,7 +930,7 @@ output_schemas:
         game_id: string (uuid)
         game_name: string
         macro_skill: "Design and Art"
-        worker_id: "scraper_design_art"
+        scraper_id: "scraper_design_art"
         generated_at: string (ISO 8601)
         data_sources: array<string>
 
@@ -737,7 +983,7 @@ output_schemas:
         game_id: string (uuid)
         game_name: string
         macro_skill: "User Experience"
-        worker_id: "scraper_user_experience"
+        scraper_id: "scraper_user_experience"
         generated_at: string (ISO 8601)
         data_sources: array<string>
 
@@ -780,7 +1026,7 @@ output_schemas:
         game_id: string (uuid)
         game_name: string
         macro_skill: "Technology and Systems"
-        worker_id: "scraper_technology_systems"
+        scraper_id: "scraper_technology_systems"
         generated_at: string (ISO 8601)
         data_sources: array<string>
 
@@ -821,7 +1067,7 @@ output_schemas:
         game_id: string (uuid)
         game_name: string
         macro_skill: "Strategy and Market"
-        worker_id: "scraper_strategy_market"
+        scraper_id: "scraper_strategy_market"
         generated_at: string (ISO 8601)
         data_sources: array<string>
 
@@ -871,13 +1117,58 @@ output_schemas:
       confidence_score: float (0.0 - 1.0)
 
 # ============================================================
-# 6. ERROR HANDLING & FALLBACKS
+# 6.1 EVIDENCE COUNT & CONFIDENCE SCORE CALCULATION
+# ============================================================
+evidence_and_confidence:
+  evidence_count:
+    description: "Total number of evidence sources collected by the scraper"
+    calculation: |
+      evidence_count = (
+        count(hard_data fields that are not null/empty)
+        + count(semantic_data sources across all categories)
+      )
+    examples:
+      - "If hard_data has 8 populated fields + semantic_data has 12 sources = evidence_count: 20"
+      - "If steam_app_id is null and Steam sources are skipped, those fields don't count"
+
+  confidence_score:
+    description: "Normalized score (0.0 - 1.0) indicating data completeness and reliability"
+    calculation: |
+      Base formula:
+        confidence_score = min(1.0, (
+          (hard_data_completeness * 0.4) +
+          (semantic_data_completeness * 0.4) +
+          (source_reliability * 0.2)
+        ))
+
+      Where:
+        hard_data_completeness = populated_hard_fields / total_expected_hard_fields
+        semantic_data_completeness = min(1.0, total_semantic_sources / 15)
+        source_reliability = average reliability of data sources used
+          (official APIs = 1.0, Tavily press = 0.8, Tavily forums = 0.6)
+
+    adjustments:
+      - "steam_app_id is null: subtract 0.15"
+      - "IGDB or RAWG unavailable: subtract 0.10 each"
+      - "Tavily unavailable (semantic_data empty): subtract 0.25"
+      - "SteamSpy unavailable: subtract 0.05 (estimated data, low weight)"
+
+    thresholds:
+      - "0.90 - 1.00: Excellent — all major sources available"
+      - "0.70 - 0.89: Good — most sources available, minor gaps"
+      - "0.50 - 0.69: Fair — some sources missing, significant gaps"
+      - "0.30 - 0.49: Poor — major sources unavailable"
+      - "0.00 - 0.29: Critical — insufficient data for analysis"
+
+# ============================================================
+# 7. ERROR HANDLING & FALLBACKS
 # ============================================================
 error_handling:
-  worker_failure_policy:
-    description: "If a worker fails, the other 3 continue. Master-JSON is built with successful workers only."
+  scraper_failure_policy:
+    description: "If a scraper fails, the other 3 continue. Master-JSON is built with successful scrapers only."
     behavior: "continue_on_failure"
-    failed_worker_output: "null for that Mini-Context section"
+    failed_scraper_output: "null for that Mini-Context section"
+    status_endpoint: "Reflects 'partial' status with error details per scraper"
 
   api_failure_fallbacks:
     - scenario: "igdb_unavailable"
@@ -885,7 +1176,7 @@ error_handling:
       severity: "medium"
 
     - scenario: "rawg_unavailable"
-      fallback: "Use IGDB as primary source; if both fail, use Steam Storefront only"
+      fallback: "Use IGDB as primary; if both fail, use Steam Storefront only"
       severity: "medium"
 
     - scenario: "steam_unavailable"
@@ -912,24 +1203,26 @@ error_handling:
     retryable_status_codes: [429, 500, 502, 503, 504]
 
 # ============================================================
-# 7. CACHING STRATEGY
+# 8. CACHING STRATEGY
 # ============================================================
 caching:
   phase_1_policy:
     description: "No LLM cache in Phase 1. Only API response cache."
     llm_cache: false
 
-api_response_cache:
+  api_response_cache:
     enabled: true
     ttl_seconds: 3600
     storage: "FastAPI in-memory"
+    backend: "InMemoryBackend (fastapi-cache or custom dict)"
     key_format: "scraper:{game_id}:{api_source}:{endpoint_hash}"
-    
+
     implementation_notes: |
       FastAPI in-memory caching replaces Redis for simplicity.
-      Uses fastapi-cache with InMemoryBackend for cache storage.
+      Uses a thread-safe dict or fastapi-cache with InMemoryBackend.
       Cache persists during application lifetime, clears on restart.
       Same TTL and key format maintained for consistency.
+      Suitable for single-instance deployments.
 
     cached_endpoints:
       - "IGDB game metadata"
@@ -942,14 +1235,18 @@ api_response_cache:
       - "Steam current player count"
 
 # ============================================================
-# 8. RATE LIMITING
+# 9. RATE LIMITING
 # ============================================================
 rate_limits:
   tavily:
     max_requests_per_month: 1000
-    requests_per_worker: 20
-    total_requests_per_game: 80
+    requests_per_scraper: 20
+    total_requests_per_game: 68
     concurrency_limit: 4
+    circuit_breaker:
+      enabled: true
+      warning_threshold: 800
+      action_at_limit: "Reduce max_results_per_query to 3 and log alert"
 
   igdb:
     requests_per_second: 4
@@ -968,14 +1265,14 @@ rate_limits:
     burst_limit: 3
 
 # ============================================================
-# 9. MONITORING & OBSERVABILITY
+# 10. MONITORING & OBSERVABILITY
 # ============================================================
 monitoring:
   metrics:
     - name: "scraper_latency_seconds"
       type: histogram
-      labels: ["worker_id", "game_id"]
-      description: "Total execution time per worker"
+      labels: ["scraper_id", "game_id"]
+      description: "Total execution time per scraper"
 
     - name: "scraper_api_calls_total"
       type: counter
@@ -984,18 +1281,23 @@ monitoring:
 
     - name: "scraper_tavily_results_total"
       type: counter
-      labels: ["worker_id", "category", "game_id"]
-      description: "Tavily results by worker and category"
+      labels: ["scraper_id", "category", "game_id"]
+      description: "Tavily results by scraper and category"
 
     - name: "scraper_errors_total"
       type: counter
-      labels: ["worker_id", "error_type", "game_id"]
-      description: "Errors by worker and type"
+      labels: ["scraper_id", "error_type", "game_id"]
+      description: "Errors by scraper and type"
 
     - name: "scraper_evidence_count"
       type: gauge
-      labels: ["worker_id", "game_id"]
+      labels: ["scraper_id", "game_id"]
       description: "Evidence sources collected"
+
+    - name: "scraper_confidence_score"
+      type: gauge
+      labels: ["scraper_id", "game_id"]
+      description: "Confidence score per scraper output"
 
   logging:
     level: "INFO"
@@ -1003,7 +1305,7 @@ monitoring:
     fields:
       - timestamp
       - level
-      - worker_id
+      - scraper_id
       - game_id
       - message
       - duration_ms
@@ -1011,7 +1313,7 @@ monitoring:
       - error_details
 
 # ============================================================
-# 10. SECURITY & DATA PRIVACY
+# 11. SECURITY & DATA PRIVACY
 # ============================================================
 security:
   api_key_management:

@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *.pyo
 .env
+!.env.example
 venv/
 
 # Node
@@ -25,3 +26,5 @@ logs/
 # Secrets
 .env.local
 
+# Claude
+CLAUDE.md
