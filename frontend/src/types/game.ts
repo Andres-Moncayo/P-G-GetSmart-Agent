@@ -31,3 +31,41 @@ export interface ReportPreview {
   macroSkills: MacroSkill[];
   market: Record<string, string>;
 }
+
+export interface GameCandidateSource {
+  provider: 'igdb' | 'rawg' | 'steam' | 'stub';
+  external_id: string;
+  confidence: number;
+}
+
+export interface GameCandidate {
+  id: string;
+  name: string;
+  slug: string | null;
+  release_year: number | null;
+  release_date: string | null;
+  developer: string | null;
+  publisher: string | null;
+  platforms: string[];
+  genres: string[];
+  cover_url: string | null;
+  summary: string | null;
+  igdb_id: string | null;
+  rawg_id: string | null;
+  steam_app_id: string | null;
+  sources: GameCandidateSource[];
+}
+
+export interface GameSearchResponse {
+  query: string;
+  total: number;
+  candidates: GameCandidate[];
+  sources_queried: string[];
+  latency_ms: number;
+}
+
+export interface GameConfirmResponse {
+  confirmed_game: GameCandidate;
+  can_run_pipeline: boolean;
+  pipeline_token: string;
+}
