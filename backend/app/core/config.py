@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     # AI
     gemini_api_key: str = ""
 
+    # Game data APIs (pre-scraper Phase 0)
+    igdb_client_id: str = ""
+    igdb_client_secret: str = ""
+    rawg_api_key: str = ""
+    tavily_api_key: str = ""
+
     # Frontend
     frontend_url: str = "http://localhost:5173"
 
