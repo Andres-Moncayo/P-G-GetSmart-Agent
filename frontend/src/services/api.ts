@@ -1,5 +1,6 @@
 import axios from 'axios';
 import type { UserProfile, ApiKey, UserPreferences } from '../types';
+import type { GameSearchResponse, GameConfirmResponse } from '../types/game';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const TOKEN_KEY = 'gs_access_token';
@@ -123,6 +124,21 @@ class ApiClient {
 
   async revokeApiKey(keyId: string): Promise<void> {
     await this.client.delete(`/api/v1/me/api-keys/${keyId}`);
+  }
+
+  async searchGames(query: string, limit = 10): Promise<GameSearchResponse> {
+    const response = await this.client.get('/api/v1/games/search', {
+      params: { q: query, limit },
+    });
+    return response.data;
+  }
+
+  async confirmGame(gameId: string, source: string = 'igdb'): Promise<GameConfirmResponse> {
+    const response = await this.client.post('/api/v1/games/confirm', {
+      game_id: gameId,
+      source,
+    });
+    return response.data;
   }
 }
 

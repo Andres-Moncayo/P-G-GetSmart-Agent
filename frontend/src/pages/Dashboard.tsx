@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { REPORTS, REPORT_PREVIEWS, GENRE_FILTERS, DEV_FILTERS, PLATFORM_FILTERS, DATE_FILTERS, REPORT_DATES } from '../data/gameData';
-import type { Report, ReportPreview } from '../types/game';
+import type { Report, ReportPreview, GameCandidate } from '../types/game';
+import { apiClient } from '../services/api';
 
 function fmtDate(iso: string | undefined): string {
   if (!iso) return '';
@@ -185,37 +186,115 @@ function ReportCard({ report, onClick }: ReportCardProps) {
 
 // ─── DisambiguationModal ─────────────────────────────────────────────────────
 
-interface DisambiguationModalProps { query: string; onClose: () => void; onConfirm: () => void; }
-const CANDIDATES = [
-  { id: 1, title: 'Elden Ring', developer: 'FromSoftware · 2022', igdb: 'IGDB #119388', platforms: 'PC, PS5, XSX' },
-  { id: 2, title: 'Elden Ring: Shadow of the Erdtree', developer: 'FromSoftware · 2024', igdb: 'IGDB #218553', platforms: 'PC, PS5, XSX' },
-  { id: 3, title: 'Elden Ring (PS4)', developer: 'FromSoftware · 2022', igdb: 'IGDB #119389', platforms: 'PS4, XBO' },
-];
-function DisambiguationModal({ query, onClose, onConfirm }: DisambiguationModalProps) {
-  const [selected, setSelected] = useState(1);
+interface DisambiguationModalProps {
+  query: string;
+  candidates: GameCandidate[];
+  onClose: () => void;
+  onConfirm: (game: GameCandidate) => void;
+}
+
+function DisambiguationModal({ query, candidates, onClose, onConfirm }: DisambiguationModalProps) {
+  const [selectedId, setSelectedId] = useState<string | null>(
+    candidates.length > 0 ? candidates[0].id : null
+  );
+
+  const selectedGame = candidates.find((c) => c.id === selectedId) ?? null;
+
+  function handleConfirm() {
+    if (selectedGame) onConfirm(selectedGame);
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-surface border border-border rounded-2xl w-full max-w-md mx-4 shadow-modal" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
         <div className="p-5 border-b border-border">
           <p className="text-xs text-accent font-medium uppercase tracking-wider mb-1">Disambiguation</p>
           <h3 className="text-lg font-bold text-primary">"{query}"</h3>
-          <p className="text-xs text-muted mt-0.5">Select the exact game to analyze</p>
+          <p className="text-xs text-muted mt-0.5">
+            {candidates.length === 0
+              ? 'No games found — try a different search term'
+              : `${candidates.length} match${candidates.length !== 1 ? 'es' : ''} found — select the correct game`}
+          </p>
         </div>
-        <div className="p-4 space-y-2">
-          {CANDIDATES.map((c) => (
-            <label key={c.id} className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${selected === c.id ? 'border-accent bg-accent/8' : 'border-border hover:border-border-hover'}`}>
-              <input type="radio" name="candidate" value={c.id} checked={selected === c.id} onChange={() => setSelected(c.id)} className="mt-0.5 accent-accent" />
-              <div>
-                <p className="text-sm font-semibold text-primary">{c.title}</p>
-                <p className="text-xs text-muted">{c.developer}</p>
-                <p className="text-xs text-disabled mt-0.5">{c.igdb} · {c.platforms}</p>
+
+        {/* Candidates list */}
+        <div className="p-4 space-y-2 max-h-80 overflow-y-auto scrollbar-hide">
+          {candidates.length === 0 && (
+            <div className="text-center py-6">
+              <i className="fas fa-search text-disabled text-2xl mb-2" />
+              <p className="text-sm text-muted">No games found for "{query}"</p>
+              <p className="text-xs text-disabled mt-1">Try a different search term</p>
+            </div>
+          )}
+
+          {candidates.map((c) => (
+            <label
+              key={c.id}
+              className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                selectedId === c.id ? 'border-accent bg-accent/8' : 'border-border hover:border-border-hover'
+              }`}
+            >
+              {/* Cover thumbnail */}
+              <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-elevated">
+                {c.cover_url ? (
+                  <img src={c.cover_url} alt={c.name} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <i className="fas fa-gamepad text-disabled text-lg" />
+                  </div>
+                )}
               </div>
+
+              {/* Info */}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-primary leading-tight truncate">{c.name}</p>
+                <p className="text-xs text-muted mt-0.5">
+                  {[c.developer, c.release_year, c.genres[0]].filter(Boolean).join(' · ')}
+                </p>
+                <div className="flex items-center gap-2 mt-1">
+                  {c.igdb_id && (
+                    <span className="text-[10px] text-disabled bg-elevated px-1.5 py-0.5 rounded font-mono">igdb: {c.igdb_id}</span>
+                  )}
+                  {c.platforms.length > 0 && (
+                    <span className="text-[10px] text-disabled truncate">{c.platforms.slice(0, 2).join(', ')}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Radio */}
+              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all ${
+                selectedId === c.id ? 'border-accent bg-accent' : 'border-border bg-transparent'
+              }`}>
+                {selectedId === c.id && <div className="w-2 h-2 rounded-full bg-white" />}
+              </div>
+              <input type="radio" name="candidate" value={c.id} checked={selectedId === c.id} onChange={() => setSelectedId(c.id)} className="sr-only" />
             </label>
           ))}
         </div>
-        <div className="p-4 border-t border-border flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-border text-sm text-muted hover:text-primary hover:border-border-hover transition-colors">Cancel</button>
-          <button onClick={onConfirm} className="flex-1 py-2 rounded-lg bg-accent text-white text-sm font-semibold hover:bg-accent-dark transition-colors">Run Pipeline</button>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-border">
+          <div className="flex gap-2">
+            <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-border text-sm text-muted hover:text-primary hover:border-border-hover transition-colors">
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirm}
+              disabled={!selectedGame}
+              className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                selectedGame
+                  ? 'bg-accent text-white hover:bg-accent-dark shadow-lg shadow-accent/25'
+                  : 'bg-elevated text-disabled cursor-not-allowed'
+              }`}
+            >
+              Run Pipeline
+            </button>
+          </div>
+          <p className="text-xs text-muted text-center mt-2">
+            Can't find it?{' '}
+            <button onClick={onClose} className="text-accent hover:text-accent-light transition-colors">Search with different terms</button>
+          </p>
         </div>
       </div>
     </div>
@@ -409,11 +488,13 @@ export function Dashboard() {
   const [platformFilters, setPlatFilters] = useState<string[]>([]);
   const [dateFilter, setDateFilter]       = useState<number | null>(null);
 
-  const [showDisamb, setShowDisamb]       = useState(false);
-  const [showPipeline, setShowPipeline]   = useState(false);
-  const [showPreview, setShowPreview]     = useState<number | null>(null);
-  const [inputQuery, setInputQuery]       = useState('');
-  const [pipelineTitle, setPipelineTitle] = useState('');
+  const [showDisamb, setShowDisamb]         = useState(false);
+  const [showPipeline, setShowPipeline]     = useState(false);
+  const [showPreview, setShowPreview]       = useState<number | null>(null);
+  const [inputQuery, setInputQuery]         = useState('');
+  const [pipelineTitle, setPipelineTitle]   = useState('');
+  const [disambCandidates, setDisambCandidates] = useState<GameCandidate[]>([]);
+  const [isGenerating, setIsGenerating]     = useState(false);
 
   function toggle<T>(arr: T[], val: T): T[] {
     return arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val];
@@ -470,11 +551,27 @@ export function Dashboard() {
     setGenreFilters([]); setDevFilters([]); setPlatFilters([]); setDateFilter(null);
   }
 
-  function handleSearch(e: React.FormEvent) {
+  async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
-    if (!inputQuery.trim()) return;
-    setPipelineTitle(inputQuery.trim());
-    setShowDisamb(true);
+    const query = inputQuery.trim();
+    if (!query) return;
+    setIsGenerating(true);
+    try {
+      const res = await apiClient.searchGames(query, 10);
+      setDisambCandidates(res.candidates);
+    } catch {
+      setDisambCandidates([]);
+    } finally {
+      setIsGenerating(false);
+      setPipelineTitle(query);
+      setShowDisamb(true);
+    }
+  }
+
+  function handleDisambiguationConfirm(game: GameCandidate) {
+    setShowDisamb(false);
+    setPipelineTitle(game.name);
+    setShowPipeline(true);
   }
 
   const previewReport = showPreview !== null ? REPORTS.find((r) => r.id === showPreview) : null;
@@ -487,19 +584,29 @@ export function Dashboard() {
       {/* Search hero */}
       <div className="px-6 pt-5 pb-4 border-b border-border flex-shrink-0">
         <div className="flex items-center gap-4 max-w-4xl">
-          <form onSubmit={handleSearch} className="flex-1 relative">
-            <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-muted text-sm pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Search reports or analyze a new game…"
-              value={inputQuery}
-              onChange={(e) => { setInputQuery(e.target.value); setSearch(e.target.value); }}
-              className="w-full bg-elevated border border-border rounded-xl py-2.5 pl-10 pr-36 text-sm text-primary placeholder-muted focus:outline-none focus:border-accent transition-colors"
-            />
-            <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 bg-accent hover:bg-accent-dark text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
-              Generate New Report
-            </button>
-          </form>
+          <div className="flex-1 relative">
+            <form onSubmit={handleSearch}>
+              <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-muted text-sm pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search reports or analyze a new game…"
+                value={inputQuery}
+                onChange={(e) => { setInputQuery(e.target.value); setSearch(e.target.value); }}
+                className="w-full bg-elevated border border-border rounded-xl py-2.5 pl-10 pr-44 text-sm text-primary placeholder-muted focus:outline-none focus:border-accent transition-colors"
+                autoComplete="off"
+              />
+              <button
+                type="submit"
+                disabled={isGenerating || !inputQuery.trim()}
+                className="absolute right-2 top-1/2 -translate-y-1/2 bg-accent hover:bg-accent-dark disabled:bg-elevated disabled:text-disabled disabled:cursor-not-allowed text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5"
+              >
+                {isGenerating
+                  ? <><div className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />Searching…</>
+                  : 'Generate New Report'
+                }
+              </button>
+            </form>
+          </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <span className="text-xs text-muted">Sort:</span>
             {(['recent', 'alpha', 'year'] as SortKey[]).map((key) => (
@@ -595,7 +702,7 @@ export function Dashboard() {
 
       {/* Modals */}
       {showDisamb && (
-        <DisambiguationModal query={pipelineTitle} onClose={() => setShowDisamb(false)} onConfirm={() => { setShowDisamb(false); setShowPipeline(true); }} />
+        <DisambiguationModal query={pipelineTitle} candidates={disambCandidates} onClose={() => setShowDisamb(false)} onConfirm={handleDisambiguationConfirm} />
       )}
       {showPipeline && (
         <PipelineModal gameTitle={pipelineTitle} onClose={() => setShowPipeline(false)} onComplete={() => {}} />
