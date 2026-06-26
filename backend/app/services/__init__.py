@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from sqlalchemy import text
+from sqlalchemy import text, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import FacetCount, Facets, Game, Pagination, Report, ReportListResponse
@@ -211,32 +211,27 @@ class ReportService:
         if tags is None and notes is None:
             return await self.get_report(report_id)
 
-        set_parts = ["updated_at = NOW()"]
-        params: Dict[str, Any] = {"report_id": str(report_id)}
+        # Use ORM for the update — asyncpg TEXT[] parameters fail in raw text() queries
+        # due to indeterminate type inference; ORM handles array columns correctly.
+        from app.models.report import Report as ReportORM
+
+        orm_result = await self.db.execute(
+            select(ReportORM).where(ReportORM.id == report_id)
+        )
+        report_orm = orm_result.scalar_one_or_none()
+        if not report_orm:
+            return None
 
         if tags is not None:
-            set_parts.append("tags = :tags")
-            params["tags"] = tags
-
+            report_orm.tags = tags
         if notes is not None:
-            set_parts.append(
-                "user_metadata_jsonb = COALESCE(user_metadata_jsonb, '{}'::jsonb) "
-                "|| jsonb_build_object('user_notes', :notes)"
-            )
-            params["notes"] = notes
+            meta = dict(report_orm.user_metadata_jsonb or {})
+            meta["user_notes"] = notes
+            report_orm.user_metadata_jsonb = meta
 
-        query = text(
-            f"""
-            UPDATE {TABLE_REPORTS}
-            SET {', '.join(set_parts)}
-            WHERE id = :report_id
-            RETURNING *
-            """
-        )
-        result = await self.db.execute(query, params)
         await self.db.commit()
-        item = result.first()
-        return self._row_to_report(item) if item else None
+        await self.db.refresh(report_orm)
+        return self._row_to_report(report_orm)
 
     async def delete_report(self, report_id: UUID) -> bool:
         query = text(
@@ -290,7 +285,7 @@ class ReportService:
         updated_at = getattr(row, "updated_at", None) or row.created_at
 
         return Report(
-            id=row.id,
+            id=str(row.id),
             game=game,
             status=status_value,
             current_phase=None,

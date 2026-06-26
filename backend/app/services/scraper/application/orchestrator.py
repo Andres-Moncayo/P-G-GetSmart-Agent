@@ -270,26 +270,30 @@ async def run_complete_pipeline_with_db(game_payload: dict[str, Any], tracker_re
     # Preserve tracker report id separately from DB report id
     tracker_id = tracker_report_id
     
-# Create initial report record (TEMP DISABLED for testing)
+# Create initial report record in `reports` table
+    db_report_id = None
     try:
-        # TEMP: Skip database creation to bypass stuck pipelines
-        # report = await report_service.create_new_report(game_id, game_name, platform)
-        # db_report_id = report.id
-        # logger.info(f"Created initial report record: {db_report_id}")
-        
-        # TEMP: Use fake db_report_id for testing
-        db_report_id = hash(game_name) % 10000 + 1  # Simple hash for testing
-        logger.info(f"TEMP: Using fake db_report_id: {db_report_id}")
-
+        report = await report_service.create_new_report(
+            game_id=game_id,
+            game_name=game_name,
+            platform=platform,
+            developer_name=game_payload.get("developer_name"),
+            release_year=game_payload.get("release_year") or None,
+            primary_genre=(game_payload.get("all_genres") or [None])[0],
+            primary_platform=game_payload.get("primary_platform") or platform,
+            all_genres=game_payload.get("all_genres") or [],
+            all_platforms=game_payload.get("all_platforms") or [],
+            cover_url=game_payload.get("cover_url"),
+        )
+        db_report_id = str(report.id)
+        logger.info("Created initial report record: %s", db_report_id)
         if tracker_id and tracker_id in pipeline_tracker.active_pipelines:
             pipeline_tracker.active_pipelines[tracker_id]["db_report_id"] = db_report_id
     except Exception as exc:
         logger.error("Failed to create initial report record: %s", exc)
-        db_report_id = hash(game_name) % 10000 + 1  # Fallback fake ID
         if tracker_id:
-            await pipeline_tracker.update_phase_progress(tracker_id, 0.0, "Using fallback report ID due to DB issues")
-            await pipeline_tracker.add_log(tracker_id, f"Using fallback ID due to DB issues: {exc}", "warning")
-# Continue with pipeline instead of returning early
+            await pipeline_tracker.add_log(tracker_id, f"DB init failed, pipeline continues without persistence: {exc}", "warning")
+# Continue pipeline even if DB init fails (db_report_id stays None)
 
     if tracker_id:
         await pipeline_tracker.update_phase_progress(tracker_id, 0.0, "Phase 1 scraping started")
@@ -458,13 +462,14 @@ async def run_complete_pipeline_with_db(game_payload: dict[str, Any], tracker_re
                 synthesis_content,
             )
 
+            word_count = len(saved_report.markdown_content.split()) if saved_report.markdown_content else 0
             db_storage_result = {
                 "status": "success",
-                "report_id": saved_report.id,
-                "report_url": f"/api/reports/{saved_report.id}",
+                "report_id": str(saved_report.id),
+                "report_url": f"/api/v1/reports/{saved_report.id}",
                 "report_created_at": saved_report.created_at.isoformat(),
-                "word_count": saved_report.word_count,
-                "confidence_score": saved_report.confidence_score
+                "word_count": word_count,
+                "confidence_score": float(saved_report.confidence_score) if saved_report.confidence_score else None,
             }
             
             logger.info(f"Phase 4 completed: Report saved to database with ID {saved_report.id}")

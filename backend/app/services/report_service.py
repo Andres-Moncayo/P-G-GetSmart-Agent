@@ -1,206 +1,210 @@
 """
-Service layer for report operations and business logic.
+Pipeline-facing service for report persistence.
+
+Writes to `reports` and `analysis` tables defined in backend/UnityGsmart.sql.
+The in-memory pipeline_tracker handles live progress; this service handles
+durable DB state only.
 """
 
-from typing import List, Optional, Dict, Any
-from datetime import datetime, timezone
-from uuid import UUID
+import uuid
+import logging
+from typing import Optional, Dict, Any, List
 
 from ..db.connection import AsyncSessionLocal
-from ..repositories.report_repository import ReportRepository, PipelineStatusRepository, RawDataRepository
-from ..models.report import AnalysisReport, PipelineStatus
+from ..repositories.report_repository import ReportRepository, AnalysisRepository
+from ..models.report import Report
+
+logger = logging.getLogger(__name__)
+
+DEMO_USER_ID = "00000000-0000-0000-0000-000000000001"
 
 
 class ReportService:
-    """High-level service for report operations."""
-    
-    def __init__(self):
-        self._report_repo = None
-        self._status_repo = None
-        self._raw_data_repo = None
-        self._db = None
+    """Lifecycle management for reports and per-skill analysis rows."""
 
-    async def _get_repositories(self):
-        """Initialize repositories with async session."""
+    def __init__(self):
+        self._db = None
+        self._report_repo: Optional[ReportRepository] = None
+        self._analysis_repo: Optional[AnalysisRepository] = None
+
+    async def _init(self):
         if not self._db:
             self._db = AsyncSessionLocal()
             self._report_repo = ReportRepository(self._db)
-            self._status_repo = PipelineStatusRepository(self._db)
-            self._raw_data_repo = RawDataRepository(self._db)
-        return self._report_repo, self._status_repo, self._raw_data_repo
+            self._analysis_repo = AnalysisRepository(self._db)
 
     async def close(self):
-        """Close the database session if open."""
         if self._db:
             await self._db.close()
             self._db = None
             self._report_repo = None
-            self._status_repo = None
-            self._raw_data_repo = None
+            self._analysis_repo = None
 
     async def __aenter__(self):
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, *_):
         await self.close()
 
-    async def create_new_report(self, game_id: str, game_title: str, platform: str) -> AnalysisReport:
-        """Create a new report and initialize pipeline tracking."""
-        report_repo, status_repo, raw_repo = await self._get_repositories()
-        
-        # Create the report with placeholder content so the initial record is valid.
-        report_data = {
-            "game_id": game_id,
-            "game_title": game_title,
-            "platform": platform,
-            "title": f"Analysis Report: {game_title}",
-            "status": "pending",
-            "phases_completed": [],
-            "total_phases": 4,
-            "markdown_content": "",
-            "json_content": {},
-        }
-        
-        report = await report_repo.create_report(report_data)
-        
-        # Initialize pipeline status tracking
-        phases = ["phase1", "phase2", "phase3", "phase4"]
-        for phase in phases:
-            await status_repo.update_phase_status(
-                report.id, phase, "pending", 0.0
-            )
-        
-        return report
+    # ── helpers ──────────────────────────────────────────────────────────────
 
-    async def save_analysis_results(self, report_id: str, game_id: str, game_title: str, platform: str,
-                                  master_json: Dict[str, Any], markdown_content: str) -> AnalysisReport:
-        """Save complete analysis results to database."""
-        report_repo, status_repo, raw_repo = await self._get_repositories()
-        
-        # Save the main report, updating the existing draft report record.
-        report = await report_repo.save_synthesis_result(
-            game_id, game_title, platform, master_json, markdown_content, report_id=report_id
-        )
-        
-        # Update final phase status
-        await status_repo.update_phase_status(
-            report.id, "phase4", "completed", 100.0
-        )
-        
-        # Store raw data for potential reprocessing
-        await raw_repo.store_raw_data(
-            game_id=game_id,
-            phase="synthesis",
-            source="ai_orchestrator",
-            data_type="final_result",
-            content={
-                "master_json": master_json,
-                "markdown_content": markdown_content
-            },
-            metadata={
-                "report_id": str(report.id),
-                "processing_time_ms": master_json.get("metadata", {}).get("processing_time_ms"),
-                "confidence_score": master_json.get("metadata", {}).get("overall_confidence")
-            }
-        )
-        
-        return report
-
-    async def get_report_by_id(self, report_id: str) -> Optional[AnalysisReport]:
-        """Get a complete report with status tracking."""
-        report_repo, status_repo, raw_repo = await self._get_repositories()
-        return await report_repo.get_report_by_id(report_id)
-
-    async def get_latest_report_for_game(self, game_id: str) -> Optional[AnalysisReport]:
-        """Get the most recent report for a specific game."""
-        report_repo, status_repo, raw_repo = await self._get_repositories()
-        return await report_repo.get_latest_report_by_game_id(game_id)
-
-    async def get_all_reports_for_game(self, game_id: str, limit: int = 10) -> List[AnalysisReport]:
-        """Get all reports for a specific game."""
-        report_repo, status_repo, raw_repo = await self._get_repositories()
-        return await report_repo.get_reports_by_game_id(game_id, limit)
-
-    async def update_pipeline_progress(self, report_id: str, phase: str, 
-                                     status: str, progress: float = None,
-                                     error_message: str = None, phase_data: Dict = None) -> bool:
-        """Update pipeline progress for a specific phase."""
+    @staticmethod
+    def _is_uuid(value: str) -> bool:
         try:
-            report_repo, status_repo, raw_repo = await self._get_repositories()
-            
-            await status_repo.update_phase_status(
-                report_id, phase, status, progress, error_message, phase_data
+            uuid.UUID(str(value))
+            return True
+        except (ValueError, AttributeError):
+            return False
+
+    # ── public API ───────────────────────────────────────────────────────────
+
+    async def create_new_report(
+        self,
+        game_id: str,
+        game_name: str,
+        platform: str = "unknown",
+        user_id: str = DEMO_USER_ID,
+        developer_name: Optional[str] = None,
+        release_year: Optional[int] = None,
+        primary_genre: Optional[str] = None,
+        primary_platform: Optional[str] = None,
+        all_genres: Optional[List[str]] = None,
+        all_platforms: Optional[List[str]] = None,
+        cover_url: Optional[str] = None,
+    ) -> Report:
+        """Insert a 'processing' row in `reports` and return the ORM object."""
+        await self._init()
+        report_uuid = uuid.uuid4()
+        # Use game_id as-is if it's a UUID, otherwise generate a fresh one
+        db_game_id = game_id if self._is_uuid(game_id) else str(uuid.uuid4())
+
+        data = {
+            "id": report_uuid,
+            "user_id": user_id,
+            "game_id": db_game_id,
+            "report_status": "processing",
+            "report_type": "comprehensive",
+            "game_name": game_name,
+            "game_slug": game_name.lower().replace(" ", "-"),
+            "developer_name": developer_name,
+            "release_year": release_year,
+            "primary_genre": primary_genre,
+            "primary_platform": primary_platform or platform,
+            "all_genres": all_genres or [],
+            "all_platforms": all_platforms or [],
+            "cover_url": cover_url,
+            "current_phase": "scraping",
+            "pipeline_progress": 0,
+            "game_data_jsonb": {},
+            "pipeline_data_jsonb": {},
+            "report_metadata_jsonb": {},
+            "executive_summary_jsonb": {},
+            "thematic_analysis_jsonb": {},
+            "cross_cutting_insights_jsonb": {},
+            "strategic_recommendations_jsonb": {},
+            "risk_assessment_jsonb": {},
+            "appendices_jsonb": {},
+            "confidence_analysis_jsonb": {},
+            "performance_metrics_jsonb": {},
+            "user_metadata_jsonb": {},
+        }
+        report = await self._report_repo.create_report(data)
+        logger.info("Created report row %s for game '%s'", report.id, game_name)
+        return report
+
+    async def save_analysis_results(
+        self,
+        report_id: str,
+        game_id: str,
+        game_name: str,
+        platform: str,
+        master_json: Dict[str, Any],
+        markdown_content: str,
+        user_id: str = DEMO_USER_ID,
+        ai_results: Optional[Dict[str, Any]] = None,
+    ) -> Report:
+        """Persist synthesis output and create per-skill Analysis rows."""
+        await self._init()
+
+        skill_map = {
+            "design_art": "design_art",
+            "user_experience": "user_experience",
+            "technology_systems": "technology_systems",
+            "strategy_market": "strategy_market",
+        }
+
+        if ai_results:
+            for skill_key, analysis_type in skill_map.items():
+                skill_data = ai_results.get(skill_key) or {}
+                if skill_data:
+                    try:
+                        await self._analysis_repo.create_skill_analysis(
+                            report_id=report_id,
+                            user_id=user_id,
+                            game_id=game_id,
+                            analysis_type=analysis_type,
+                            raw_output=skill_data,
+                        )
+                    except Exception as exc:
+                        logger.warning("Could not save analysis row for %s: %s", analysis_type, exc)
+
+        # Synthesis analysis row
+        try:
+            synth_data = master_json.get("synthesis", master_json)
+            confidence = master_json.get("metadata", {}).get("overall_confidence")
+            await self._analysis_repo.create_skill_analysis(
+                report_id=report_id,
+                user_id=user_id,
+                game_id=game_id,
+                analysis_type="synthesis",
+                raw_output=synth_data,
+                confidence_score=confidence,
             )
-            
-            # Update overall report status if needed
+        except Exception as exc:
+            logger.warning("Could not save synthesis analysis row: %s", exc)
+
+        # Update the report row with the final result
+        report = await self._report_repo.save_synthesis_result(
+            report_id, master_json, markdown_content
+        )
+        return report
+
+    async def update_pipeline_progress(
+        self,
+        report_id: str,
+        phase: str,
+        status: str,
+        progress: float = None,
+        error_message: str = None,
+        phase_data: Dict = None,
+    ) -> bool:
+        """Persist pipeline phase/progress to the reports row."""
+        try:
+            await self._init()
+            update_data: Dict[str, Any] = {}
+            if phase:
+                update_data["current_phase"] = phase
+            if progress is not None:
+                update_data["pipeline_progress"] = min(max(int(progress), 0), 100)
             if status == "failed":
-                await report_repo.update_report_status(report_id, "failed")
-            elif phase == "phase4" and status == "completed":
-                await report_repo.update_report_status(report_id, "completed")
-            
+                update_data["report_status"] = "failed"
+            elif status == "completed" and phase in ("phase4", "synthesis", "storage"):
+                update_data["report_status"] = "completed"
+                update_data["pipeline_progress"] = 100
+            if update_data:
+                await self._report_repo.update_report(report_id, update_data)
             return True
-        except Exception as e:
-            print(f"Error updating pipeline progress: {e}")
+        except Exception as exc:
+            logger.error("update_pipeline_progress failed for %s: %s", report_id, exc)
             return False
 
-    async def search_reports(self, query: str, limit: int = 20, offset: int = 0) -> List[AnalysisReport]:
-        """Search reports by content."""
-        report_repo, status_repo, raw_repo = await self._get_repositories()
-        return await report_repo.search_reports(query, limit, offset)
+    async def store_phase_data(
+        self, game_id: str, phase: str, source: str,
+        data_type: str, content: Dict, metadata: Dict = None
+    ) -> bool:
+        """No-op stub — raw phase data is embedded in analysis JSONB columns."""
+        return True
 
-    async def get_recent_reports(self, limit: int = 50, days: int = 30) -> List[AnalysisReport]:
-        """Get reports from recent activity."""
-        report_repo, status_repo, raw_repo = await self._get_repositories()
-        return await report_repo.get_recent_reports(limit, days)
-
-    async def get_pipeline_status(self, report_id: str) -> List[PipelineStatus]:
-        """Get complete pipeline status for a report."""
-        report_repo, status_repo, raw_repo = await self._get_repositories()
-        return await status_repo.get_statuses_by_report_id(report_id)
-
-    async def store_phase_data(self, game_id: str, phase: str, source: str,
-                             data_type: str, content: Dict, metadata: Dict = None) -> bool:
-        """Store raw phase data for debugging."""
-        try:
-            report_repo, status_repo, raw_repo = await self._get_repositories()
-            await raw_repo.store_raw_data(
-                game_id, phase, source, data_type, content, metadata
-            )
-            return True
-        except Exception as e:
-            print(f"Error storing phase data: {e}")
-            return False
-
-    async def get_report_summary(self, report_id: str) -> Optional[Dict[str, Any]]:
-        """Get a lightweight summary of a report."""
-        report = await self.get_report_by_id(report_id)
-        if not report:
-            return None
-        
-        return {
-            "id": report.id,
-            "game_id": report.game_id,
-            "game_title": report.game_title,
-            "platform": report.platform,
-            "title": report.title,
-            "status": report.status,
-            "created_at": report.created_at.isoformat(),
-            "updated_at": report.updated_at.isoformat(),
-            "confidence_score": report.confidence_score,
-            "quality_rating": report.quality_rating,
-            "word_count": report.word_count,
-            "phases_completed": report.phases_completed,
-            "summary": report.summary[:200] + "..." if len(report.summary) > 200 else report.summary
-        }
-
-    async def get_game_analysis_history(self, game_id: str) -> List[Dict[str, Any]]:
-        """Get analysis history for a game with summaries."""
-        reports = await self.get_all_reports_for_game(game_id, limit=20)
-        
-        history = []
-        for report in reports:
-            summary = await self.get_report_summary(report.id)
-            if summary:
-                history.append(summary)
-        
-        return history
+    async def get_report_by_id(self, report_id: str) -> Optional[Report]:
+        await self._init()
+        return await self._report_repo.get_by_id(report_id)

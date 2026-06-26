@@ -30,8 +30,10 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
 
     # Game data APIs (pre-scraper Phase 0)
+    igdb_client_id: str = ""
+    igdb_client_secret: str = ""
     rawg_api_key: str = ""
-    
+
     # Scraper API keys (Phase 1)
     steam_api_key: str = ""
     tavily_api_key: str = ""

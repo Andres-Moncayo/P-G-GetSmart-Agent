@@ -15,16 +15,17 @@ class UserService:
     
     @staticmethod
     def update_user_profile(db: Session, current_user: User, updates: Dict[str, Any]) -> User:
-        """Update user profile"""
+        """Update user profile stored in profile_jsonb / settings_jsonb."""
         if "name" in updates:
-            current_user.name = updates["name"]
-        
+            profile = dict(current_user.profile_jsonb or {})
+            profile["display_name"] = updates["name"]
+            current_user.profile_jsonb = profile
+
         if "preferences" in updates:
-            if current_user.preferences:
-                current_user.preferences.update(updates["preferences"])
-            else:
-                current_user.preferences = updates["preferences"]
-        
+            settings = dict(current_user.settings_jsonb or {})
+            settings.update(updates["preferences"])
+            current_user.settings_jsonb = settings
+
         current_user.updated_at = datetime.utcnow()
         db.commit()
         db.refresh(current_user)
