@@ -36,7 +36,7 @@ async def list_reports(
     sort_by: str = Query("created_at", pattern="^(created_at|game\\.name|game\\.release_year|updated_at|progress_percent)$"),
     sort_dir: str = Query("desc", pattern="^(asc|desc)$"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(12, ge=1, le=100),
+    page_size: int = Query(12, ge=1, le=200),
     svc: ReportService = Depends(_get_report_service),
 ) -> ReportListResponse:
     """List reports for the dashboard with filters, sort, and pagination."""

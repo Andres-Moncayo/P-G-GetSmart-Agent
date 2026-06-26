@@ -444,8 +444,13 @@ async def run_complete_pipeline_with_db(game_payload: dict[str, Any], tracker_re
     # PHASE 4: Database storage
     logger.info("=== PHASE 4: DATABASE STORAGE ===")
     db_storage_result = {"status": "pending", "report_id": None}
-    
-    if db_report_id and master_json and synthesis_content:
+
+    # If synthesis failed/skipped, synthesis_content is None — use the fallback markdown
+    # from synthesis_result so Phase 4 always persists whatever data is available.
+    if synthesis_content is None and synthesis_result:
+        synthesis_content = synthesis_result.get("markdown_content", "")
+
+    if db_report_id and master_json and synthesis_content is not None:
         try:
             if db_report_id:
                 await report_service.update_pipeline_progress(db_report_id, "phase4", "running", 0.0)
