@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from app.core.config import GEMINI_API_KEY, SYNTHESIS_MODEL
 from app.models.synthesis.synthesis_models import FinalReport
-from app.services.macro_skills.synthesis.prompt_loader import PromptLoader
+from app.services.macro_skills.synthesis_Skill.prompt_loader import PromptLoader
 
 
 class GeminiSynthesizer:

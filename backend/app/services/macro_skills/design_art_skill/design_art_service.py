@@ -1,8 +1,18 @@
 import os
 import json
+import logging
 from datetime import datetime
 from typing import Dict, List, Any, Optional
-import google.generativeai as genai
+
+try:
+    import google.genai as genai
+    if not hasattr(genai, "configure") or not hasattr(genai, "GenerativeModel"):
+        raise ImportError("google.genai does not expose required Gemini APIs")
+except ImportError:
+    try:
+        import google.generativeai as genai
+    except ImportError:
+        genai = None
 
 from ....models.macro_skills.design_art_models import (
     DesignArtInputModel, DesignArtOutputModel, DesignArtMetadata,
@@ -25,6 +35,11 @@ from ....models.macro_skills.design_art_models import (
     LanguageCoverageEnum, OverallImpactEnum, SynergyEnum
 )
 
+from ...scraper.infrastructure.llm_client import GeminiClient
+
+
+logger = logging.getLogger(__name__)
+
 
 class DesignArtService:
     """Service for Design & Art macro-skill analysis."""
@@ -32,12 +47,54 @@ class DesignArtService:
     def __init__(self):
         # Initialize Gemini API
         api_key = os.getenv("GEMINI_API_KEY")
+        self.model = None
+        self._http_client = GeminiClient(api_key=api_key if api_key else None)
+
+        if not genai:
+            logger.warning(
+                "Gemini SDK is not installed; using HTTP fallback or mock analysis for Design & Art skill."
+            )
+            return
+
         if api_key:
-            genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel('gemini-2.5-flash')
+            try:
+                if hasattr(genai, "configure"):
+                    genai.configure(api_key=api_key)
+
+                if hasattr(genai, "GenerativeModel"):
+                    self.model = genai.GenerativeModel('gemini-2.5-flash')
+                else:
+                    logger.warning(
+                        "Gemini SDK installed but GenerativeModel is unavailable; using HTTP fallback."
+                    )
+            except Exception as exc:
+                logger.warning(
+                    "Gemini model initialization failed; falling back to HTTP client: %s",
+                    exc,
+                )
+                self.model = None
         else:
-            self.model = None
-            print("Warning: GEMINI_API_KEY not found. Using mock analysis.")
+            logger.warning(
+                "GEMINI_API_KEY not found. Using HTTP fallback or mock analysis for Design & Art skill."
+            )
+
+    async def _call_gemini_prompt(self, prompt: str) -> str:
+        """Run Gemini prompt through SDK if available, else HTTP fallback."""
+        if self.model is not None:
+            response = self.model.generate_content(prompt)
+            return getattr(response, "text", "") or ""
+
+        if self._http_client is not None:
+            generated = await self._http_client.generate_structured_json(
+                system_instruction="",
+                user_prompt=prompt,
+            )
+            try:
+                return json.dumps(generated, ensure_ascii=False)
+            except Exception:
+                return str(generated)
+
+        return ""
 
     def _extract_sources_from_category(self, semantic_data: Dict[str, Any], category: str) -> List[SourceCited]:
         """Extract and format sources from semantic data for a specific category."""
@@ -77,7 +134,7 @@ class DesignArtService:
         else:
             return 0.2
 
-    def _analyze_gameplay_with_llm(self, hard_data: Dict[str, Any], semantic_data: Dict[str, Any]) -> GameplayAnalysis:
+    async def _analyze_gameplay_with_llm(self, hard_data: Dict[str, Any], semantic_data: Dict[str, Any]) -> GameplayAnalysis:
         """Analyze gameplay mechanics using LLM or fallback logic."""
         
         # Extract basic info from hard_data
@@ -93,16 +150,15 @@ class DesignArtService:
             'storyline': hard_data.get('storyline', ''),
             'sources': self._extract_sources_from_category(semantic_data, 'gameplay_mechanics')
         }
-        
-        if self.model:
+
+        prompt = self._create_gameplay_prompt(context)
+        if self.model or self._http_client:
             try:
-                prompt = self._create_gameplay_prompt(context)
-                response = self.model.generate_content(prompt)
-                return self._parse_gameplay_response(response.text, context)
+                response_text = await self._call_gemini_prompt(prompt)
+                return self._parse_gameplay_response(response_text, context)
             except Exception as e:
-                print(f"LLM analysis failed: {e}, using fallback")
-        
-        # Fallback analysis
+                logger.warning("Gemini gameplay analysis failed: %s. Using fallback.", e)
+
         return self._create_fallback_gameplay_analysis(context)
 
     def _create_gameplay_prompt(self, context: Dict[str, Any]) -> str:
@@ -369,9 +425,9 @@ class DesignArtService:
             )
 
         # Generate analyses
-        gameplay_analysis = self._analyze_gameplay_with_llm(
-            input_data.hard_data, 
-            input_data.semantic_data
+        gameplay_analysis = await self._analyze_gameplay_with_llm(
+            input_data.hard_data,
+            input_data.semantic_data,
         )
         
         level_design_analysis = self._create_fallback_level_design_analysis(context)

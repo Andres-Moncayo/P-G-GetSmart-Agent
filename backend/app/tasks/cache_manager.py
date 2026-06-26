@@ -66,11 +66,6 @@ class CacheManager:
 
 
 # Cache decorators for specific API endpoints
-def cache_igdb_metadata(expire: int = CACHE_TTL_SECONDS):
-    """Cache IGDB game metadata responses."""
-    return cache(expire=expire, namespace=f"{CACHE_KEY_PREFIX}:igdb")
-
-
 def cache_rawg_metadata(expire: int = CACHE_TTL_SECONDS):
     """Cache RAWG game metadata responses."""
     return cache(expire=expire, namespace=f"{CACHE_KEY_PREFIX}:rawg")

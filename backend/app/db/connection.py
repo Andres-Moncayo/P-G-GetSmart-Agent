@@ -2,8 +2,7 @@ import os
 from urllib.parse import urlparse, urlunparse
 
 from dotenv import load_dotenv
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy import text
 from uuid import UUID
 
@@ -52,8 +51,24 @@ def _parse_database_config() -> tuple[str, dict]:
 DATABASE_URL, CONNECT_ARGS = _parse_database_config()
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
+# Create async engine and session factory
 engine = create_async_engine(DATABASE_URL, echo=DEBUG, connect_args=CONNECT_ARGS)
-AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+
+async def get_db() -> AsyncSession:
+    """Get async database session."""
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
+
+
+async def get_async_session():
+    """Get async database session for report_service."""
+    async with AsyncSessionLocal() as session:
+        yield session
 
 
 async def get_current_user_id(session_cookie: str = Cookie(None, alias="session")) -> UUID:
@@ -80,7 +95,7 @@ async def get_current_user_id(session_cookie: str = Cookie(None, alias="session"
         )
 
 
-async def get_db(
+async def get_db_with_user(
     current_user: UUID = Depends(get_current_user_id),
 ) -> AsyncSession:
     async with AsyncSessionLocal() as session:
@@ -89,3 +104,11 @@ async def get_db(
             {"user_id": str(current_user)},
         )
         yield session
+
+
+async def create_database():
+    """Create database tables."""
+    from app.models.base import Base
+    
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
