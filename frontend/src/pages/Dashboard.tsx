@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { REPORTS, REPORT_PREVIEWS, GENRE_FILTERS, DEV_FILTERS, PLATFORM_FILTERS, DATE_FILTERS, REPORT_DATES } from '../data/gameData';
 import type { Report, ReportPreview, GameCandidate } from '../types/game';
 import { apiClient } from '../services/api';
@@ -253,8 +254,8 @@ function DisambiguationModal({ query, candidates, onClose, onConfirm }: Disambig
                   {[c.developer, c.release_year, c.genres[0]].filter(Boolean).join(' · ')}
                 </p>
                 <div className="flex items-center gap-2 mt-1">
-                  {c.igdb_id && (
-                    <span className="text-[10px] text-disabled bg-elevated px-1.5 py-0.5 rounded font-mono">igdb: {c.igdb_id}</span>
+                  {c.rawg_id && (
+                    <span className="text-[10px] text-disabled bg-elevated px-1.5 py-0.5 rounded font-mono">rawg: {c.rawg_id}</span>
                   )}
                   {c.platforms.length > 0 && (
                     <span className="text-[10px] text-disabled truncate">{c.platforms.slice(0, 2).join(', ')}</span>
@@ -304,69 +305,422 @@ function DisambiguationModal({ query, candidates, onClose, onConfirm }: Disambig
 // ─── PipelineModal ────────────────────────────────────────────────────────────
 
 type PhaseState = 'idle' | 'running' | 'done';
-const PHASES = ['Ingestion', 'Consolidation', 'Analysis', 'Synthesis', 'Packaging'];
-const SKILLS = ['Design & Art', 'User Experience', 'Technology & Systems', 'Strategy & Market'];
+type SubtaskState = 'waiting' | 'running' | 'paused' | 'blocked' | 'completed' | 'failed';
 
-interface PipelineModalProps { gameTitle: string; onClose: () => void; onComplete: () => void; }
-function PipelineModal({ gameTitle, onClose, onComplete }: PipelineModalProps) {
-  const [phases, setPhases]   = useState<PhaseState[]>(['running', 'idle', 'idle', 'idle', 'idle']);
-  const [progress, setProgress] = useState(10);
-  const [done, setDone]       = useState(false);
-  const [skills, setSkills]   = useState<PhaseState[]>(['idle', 'idle', 'idle', 'idle']);
+const PHASE_CONFIG = [
+  { 
+    name: 'Scraping', 
+    icon: 'fa-search', 
+    substeps: ['Buscando en bases de datos', 'Obteniendo datos del juego', 'Recopilando reseñas'],
+    color: 'from-blue-500 to-cyan-500'
+  },
+  { 
+    name: 'Análisis IA', 
+    icon: 'fa-brain', 
+    substeps: ['Tech Systems', 'Strategy & Market', 'Optimization', 'Spec Detection'],
+    color: 'from-purple-500 to-pink-500'
+  },
+  { 
+    name: 'Síntesis', 
+    icon: 'fa-layer-group', 
+    substeps: ['Procesando resultados', 'Creando insights', 'Construyendo correlaciones'],
+    color: 'from-orange-500 to-red-500'
+  },
+  { 
+    name: 'Guardar en BD', 
+    icon: 'fa-database', 
+    substeps: ['Validando datos', 'Almacenando resultados', 'Actualizando índices'],
+    color: 'from-green-500 to-emerald-500'
+  }
+];
 
+interface PipelineStatus {
+  status: 'queued' | 'processing' | 'completed' | 'failed';
+  message: string;
+  details?: any;
+  current_task?: string;
+  phase_progress?: number;
+  overall_progress?: number;
+  tasks_succeeded?: number;
+  tasks_failed?: number;
+  tasks_total?: number;
+  phases?: Record<string, {
+    status: string;
+    progress: number;
+    tasks: Array<{
+      name: string;
+      status: string;
+      progress: number;
+      error?: string;
+    }>;
+  }>;
+}
+
+interface PipelineModalProps { gameTitle: string; reportId: string; onClose: () => void; onComplete: (reportId: string) => void; }
+function PipelineModal({ gameTitle, reportId, onClose, onComplete }: PipelineModalProps) {
+  const [currentPhase, setCurrentPhase] = useState(0);
+  const [progress, setProgress] = useState(5);
+  const [done, setDone] = useState(false);
+  const [status, setStatus] = useState<PipelineStatus | null>(null);
+  const [detailedStatus, setDetailedStatus] = useState<any>(null);
+  const [currentSubstep, setCurrentSubstep] = useState(0);
+  
+  // Map backend pipeline status to frontend phases
+  const getPhaseFromStatus = (statusInfo: PipelineStatus) => {
+    const phase = statusInfo.phase?.toLowerCase?.() || '';
+
+    if (phase === 'scraping') return 0;
+    if (phase === 'analysis') return 1;
+    if (phase === 'synthesis') return 2;
+    if (phase === 'storage') return 3;
+
+    const message = statusInfo.message.toLowerCase();
+    if (message.includes('scraping') || message.includes('phase 1')) return 0;
+    if (message.includes('analysis') || message.includes('phase 2')) return 1;
+    if (message.includes('synthesis') || message.includes('phase 3')) return 2;
+    if (message.includes('saving') || message.includes('phase 4') || message.includes('database')) return 3;
+
+    return currentPhase;
+  };
+
+  const getProgressFromStatus = (statusInfo: PipelineStatus) => {
+    if (statusInfo.overall_progress !== undefined && statusInfo.overall_progress !== null) {
+      return statusInfo.overall_progress;
+    }
+
+    const phase = getPhaseFromStatus(statusInfo);
+    const baseProgress = phase * 25;
+    const phaseProgress = statusInfo.phase_progress || 0;
+    return Math.min(100, baseProgress + (phaseProgress / 100) * 25);
+  };
+
+  // Poll for pipeline status
   useEffect(() => {
-    const t0 = setTimeout(() => { setPhases(['done', 'running', 'idle', 'idle', 'idle']); setProgress(25); }, 900);
-    const t1 = setTimeout(() => { setPhases(['done', 'done', 'running', 'idle', 'idle']); setProgress(45); }, 1800);
-    const t2 = setTimeout(() => { setSkills(['running', 'running', 'running', 'running']); }, 2200);
-    const t3 = setTimeout(() => { setPhases(['done', 'done', 'done', 'running', 'idle']); setProgress(75); setSkills(['done', 'done', 'done', 'done']); }, 3400);
-    const t4 = setTimeout(() => { setPhases(['done', 'done', 'done', 'done', 'running']); setProgress(90); }, 4400);
-    const t5 = setTimeout(() => { setPhases(['done', 'done', 'done', 'done', 'done']); setProgress(100); setDone(true); }, 5200);
-    const t6 = setTimeout(() => { onComplete(); onClose(); }, 6400);
-    return () => { [t0, t1, t2, t3, t4, t5, t6].forEach(clearTimeout); };
-  }, []);
+    if (!reportId) return;
 
-  const phaseIcon = (s: PhaseState) =>
-    s === 'done'    ? <i className="fas fa-check text-success text-xs" /> :
-    s === 'running' ? <div className="w-3 h-3 border-2 border-accent border-t-transparent rounded-full animate-spin" /> :
-                      <span className="w-2 h-2 rounded-full bg-border block" />;
+    const pollInterval = setInterval(async () => {
+      try {
+        const statusData = await apiClient.getPipelineStatus(reportId);
+        setStatus(statusData);
+        
+        // Also get detailed logs if available
+        try {
+          const detailedData = await apiClient.getPipelineLogs(reportId);
+          setDetailedStatus(detailedData);
+        } catch (e) {
+          // Detailed logs might not be available yet
+        }
+        
+        if (statusData.status === 'completed' || statusData.status === 'done') {
+          setProgress(100);
+          setDone(true);
+          setCurrentPhase(4);
+          setTimeout(() => {
+            onComplete(reportId);
+            onClose();
+          }, 2000);
+          clearInterval(pollInterval);
+        } else if (statusData.status === 'failed') {
+          clearInterval(pollInterval);
+        } else {
+          const newPhase = getPhaseFromStatus(statusData);
+          setCurrentPhase(newPhase);
+          setProgress(getProgressFromStatus(statusData));
+          
+          // Update substep based on current task
+          if (statusData.current_task) {
+            const phaseSubsteps = PHASE_CONFIG[newPhase].substeps;
+            const substepIndex = phaseSubsteps.findIndex(step => 
+              step.toLowerCase().includes(statusData.current_task.toLowerCase()) ||
+              statusData.current_task.toLowerCase().includes(step.toLowerCase())
+            );
+            if (substepIndex !== -1) {
+              setCurrentSubstep(substepIndex);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch status:', error);
+        clearInterval(pollInterval);
+      }
+    }, 1500);
+
+    return () => clearInterval(pollInterval);
+  }, [reportId, onComplete, onClose]);
+
+  const phaseIcon = (index: number, currentPhase: number, done: boolean) => {
+    if (done) return <i className="fas fa-check text-success text-xs" />;
+    if (index === currentPhase) return <div className="w-3 h-3 border-2 border-accent border-t-transparent rounded-full animate-spin" />;
+    if (index < currentPhase) return <i className="fas fa-check text-success text-xs" />;
+    return <span className="w-2 h-2 rounded-full bg-border block" />;
+  };
+
+  const getPhaseState = (index: number): PhaseState => {
+    if (done) return 'done';
+    if (index === currentPhase) return 'running';
+    if (index < currentPhase) return 'done';
+    return 'idle';
+  };
+
+const getSubstepState = (phaseIndex: number, substepIndex: number, substepName: string): SubtaskState => {
+    // Get real status from backend if available
+    const phaseKey = ['scraping', 'analysis', 'synthesis', 'storage'][phaseIndex];
+    const phaseData = status?.phases?.[phaseKey];
+    
+    if (phaseData?.tasks) {
+      const task = phaseData.tasks.find((t: any) => t.name === substepName);
+      if (task) {
+        // Map backend status to frontend states
+        const backendStatus = task.status;
+        if (backendStatus === 'COMPLETED' || backendStatus === 'completed') return 'completed';
+        if (backendStatus === 'RUNNING' || backendStatus === 'running') return 'running';
+        if (backendStatus === 'PAUSED' || backendStatus === 'paused') return 'paused';
+        if (backendStatus === 'BLOCKED' || backendStatus === 'blocked') return 'blocked';
+        if (backendStatus === 'FAILED' || backendStatus === 'failed') return 'failed';
+        if (backendStatus === 'WAITING' || backendStatus === 'waiting') return 'waiting';
+        return backendStatus as SubtaskState;
+      }
+    }
+    
+    // Only use fallback if no backend data available
+    if (done && phaseIndex < currentPhase) return 'completed';
+    if (done && phaseIndex === currentPhase) return 'completed';
+    if (phaseIndex < currentPhase) return 'completed';
+    if (phaseIndex === currentPhase) {
+      // Don't just assume completion based on index
+      const state = getPhaseState(phaseIndex);
+      return state === 'running' ? 'waiting' : 'waiting';
+    }
+    return 'waiting';
+  };
+
+  const getSubstepProgress = (phaseIndex: number, substepIndex: number, substepName: string): number => {
+    // Get real progress from backend if available
+    const phaseKey = ['scraping', 'analysis', 'synthesis', 'storage'][phaseIndex];
+    const phaseData = status?.phases?.[phaseKey];
+    
+    if (phaseData?.tasks) {
+      const task = phaseData.tasks.find((t: any) => t.name === substepName);
+      if (task) {
+        return task.progress || 0;
+      }
+    }
+    
+    // Fallback to估算
+    const state = getSubstepState(phaseIndex, substepIndex, substepName);
+    return state === 'completed' ? 100 : state === 'running' ? 50 : 0;
+  };
+
+  const getCurrentStatusMessage = () => {
+    if (done) return '✅ ¡Reporte completado con éxito!';
+    if (status?.status === 'failed') return '❌ Error en el análisis. Por favor inténtalo de nuevo.';
+    if (status?.current_task) return status.current_task;
+    if (detailedStatus?.logs?.length > 0) return detailedStatus.logs[detailedStatus.logs.length - 1].message;
+    
+    const phaseMessages = [
+      '🔍 Buscando en bases de datos de juegos...',
+      '🧠 Analizando con IA para obtener insights...',
+      '🔄 Sintetizando resultados y correlaciones...',
+      '💾 Guardando en la base de datos...'
+    ];
+    return phaseMessages[currentPhase] || 'Procesando...';
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="bg-surface border border-border rounded-2xl w-full max-w-sm mx-4 shadow-modal overflow-hidden">
+      <div className="bg-surface border border-border rounded-2xl w-full max-w-lg mx-4 shadow-modal overflow-hidden">
         <div className="p-5 border-b border-border">
           <p className="text-xs text-accent font-medium uppercase tracking-wider mb-1">GetSmart Pipeline</p>
           <h3 className="text-base font-bold text-primary truncate">{gameTitle}</h3>
+          <p className="text-xs text-muted mt-2 font-medium">{getCurrentStatusMessage()}</p>
         </div>
-        <div className="p-5 space-y-3">
-          <div className="h-1.5 bg-elevated rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-accent to-secondary rounded-full progress-glow transition-all duration-700" style={{ width: `${progress}%` }} />
+        <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto scrollbar-hide">
+          {/* Progreso general */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-muted">Progreso Total</span>
+              <span className="text-xs font-bold text-accent">{progress}%</span>
+            </div>
+            <div className="h-2 bg-elevated rounded-full overflow-hidden">
+              <div 
+                className={`h-full bg-gradient-to-r ${PHASE_CONFIG[Math.floor(currentPhase)]?.color || 'from-accent to-secondary'} rounded-full transition-all duration-700`} 
+                style={{ width: `${progress}%` }} 
+              />
+            </div>
           </div>
-          <div className="space-y-2">
-            {PHASES.map((name, i) => (
-              <div key={name} className="flex items-center gap-3">
-                <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">{phaseIcon(phases[i])}</div>
-                <span className={`text-sm ${phases[i] === 'done' ? 'text-primary' : phases[i] === 'running' ? 'text-accent' : 'text-disabled'}`}>{name}</span>
-                {name === 'Analysis' && phases[i] === 'running' && (
-                  <div className="ml-auto flex gap-1">
-                    {skills.map((s, j) => (
-                      <div key={j} title={SKILLS[j]} className={`w-1.5 h-1.5 rounded-full transition-colors ${s === 'done' ? 'bg-success' : s === 'running' ? 'bg-accent animate-pulse' : 'bg-border'}`} />
-                    ))}
-                  </div>
-                )}
+
+          {/* Estadísticas si están disponibles */}
+          {status && (status.tasks_total || status.tasks_succeeded || status.tasks_failed) && (
+            <div className="flex gap-4 text-xs">
+              <div className="flex items-center gap-1">
+                <i className="fas fa-check-circle text-success text-[10px]" />
+                <span className="text-muted">Completadas: {status.tasks_succeeded || 0}</span>
               </div>
-            ))}
-          </div>
-          {(phases[2] === 'running' || phases[2] === 'done') && (
-            <div className="pt-2 border-t border-border grid grid-cols-2 gap-1.5">
-              {SKILLS.map((name, i) => (
-                <div key={name} className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg transition-all ${skills[i] === 'done' ? 'bg-success/10 text-success' : skills[i] === 'running' ? 'bg-accent/10 text-accent' : 'bg-elevated text-disabled'}`}>
-                  <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${skills[i] === 'done' ? 'bg-success' : skills[i] === 'running' ? 'bg-accent animate-pulse' : 'bg-disabled'}`} />
-                  <span className="truncate">{name}</span>
-                </div>
-              ))}
+              <div className="flex items-center gap-1">
+                <i className="fas fa-times-circle text-danger text-[10px]" />
+                <span className="text-muted">Fallidas: {status.tasks_failed || 0}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <i className="fas fa-list text-accent text-[10px]" />
+                <span className="text-muted">Total: {status.tasks_total || 0}</span>
+              </div>
             </div>
           )}
-          {done && <p className="text-center text-sm font-semibold text-success pt-2">Report ready! Opening preview...</p>}
+
+          {/* Fases con subtareas */}
+          <div className="space-y-3">
+            {PHASE_CONFIG.map((phase, i) => {
+              const state = getPhaseState(i);
+              return (
+                <div key={phase.name} className={`rounded-lg border p-3 transition-all ${
+                  state === 'running' ? 'border-accent bg-accent/5' : 
+                  state === 'done' ? 'border-success/20 bg-success/5' : 'border-border bg-elevated/30'
+                }`}>
+                  {/* Cabecera de fase */}
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
+                      {phaseIcon(i, currentPhase, done)}
+                    </div>
+                    <i className={`fas ${phase.icon} text-xs ${
+                      state === 'done' ? 'text-success' : 
+                      state === 'running' ? 'text-accent' : 'text-disabled'
+                    }`} />
+                    <span className={`text-sm font-semibold ${
+                      state === 'done' ? 'text-primary' : 
+                      state === 'running' ? 'text-accent' : 'text-disabled'
+                    }`}>{phase.name}</span>
+                    {state === 'running' && (
+                      <div className="ml-auto">
+                        <div className={`w-1.5 h-1.5 rounded-full bg-accent animate-pulse`} />
+                      </div>
+                    )}
+                  </div>
+
+{/* Subtareas de la fase */}
+                  <div className="ml-8 space-y-1.5">
+                    {phase.substeps.map((substep, j) => {
+                      const substepState = getSubstepState(i, j, substep);
+                      const substepProgress = getSubstepProgress(i, j, substep);
+                      
+                      const getStatusColor = (state: SubtaskState) => {
+                        switch (state) {
+                          case 'running': return 'bg-amber-500';
+                          case 'paused': return 'bg-yellow-500';
+                          case 'blocked': return 'bg-red-700';
+                          case 'failed': return 'bg-red-500';
+                          case 'completed': return 'bg-success';
+                          default: return 'bg-border';
+                        }
+                      };
+                      
+                      const getStatusIcon = (state: SubtaskState) => {
+                        switch (state) {
+                          case 'running': return 'fa-spinner fa-spin';
+                          case 'paused': return 'fa-pause';
+                          case 'blocked': return 'fa-lock';
+                          case 'failed': return 'fa-times';
+                          case 'completed': return 'fa-check';
+                          default: return '';
+                        }
+                      };
+                      
+                      const getStatusIconColor = (state: SubtaskState) => {
+                        switch (state) {
+                          case 'running': return 'text-amber-500';
+                          case 'paused': return 'text-yellow-500';
+                          case 'blocked': return 'text-red-700';
+                          case 'failed': return 'text-red-500';
+                          case 'completed': return 'text-success';
+                          default: return 'text-transparent';
+                        }
+                      };
+                      
+                      const getTextColor = (state: SubtaskState) => {
+                        switch (state) {
+                          case 'running': return 'text-amber-500 font-medium';
+                          case 'paused': return 'text-yellow-500';
+                          case 'blocked': return 'text-red-700 font-medium';
+                          case 'failed': return 'text-red-500 font-medium';
+                          case 'completed': return 'text-muted line-through';
+                          default: return 'text-disabled';
+                        }
+                      };
+
+                      return (
+                        <div key={j} className="flex items-center gap-2 whitespace-nowrap">
+                          {/* Status indicator */}
+                          <div className={`w-1.5 h-1.5 rounded-full transition-all flex-shrink-0 ${
+                            substepState === 'running' ? 'bg-amber-500 animate-pulse' :
+                            getStatusColor(substepState)
+                          }`} />
+                          
+                          {/* Status icon */}
+                          <i className={`fas ${
+                            getStatusIcon(substepState)
+                          } text-[8px] ${
+                            getStatusIconColor(substepState)
+                          }`} />
+                          
+                          {/* Substep name */}
+                          <span className={`text-xs transition-colors flex-1 min-w-0 ${
+                            getTextColor(substepState)
+                          }`}>
+                            {substep}
+                          </span>
+                          
+                          {/* Progress percentage */}
+                          <span className={`text-xs font-medium ${
+                            substepState === 'running' ? 'text-amber-500' : 
+                            substepState === 'completed' ? 'text-success' : 'text-muted'
+                          }`}>
+                            {substepProgress > 0 && `${substepProgress.toFixed(0)}%`}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Mini progreso de fase */}
+                  {state === 'running' && (
+                    <div className="mt-2">
+                      <div className="h-0.5 bg-elevated rounded-full overflow-hidden">
+                        <div className={`h-full bg-gradient-to-r ${phase.color} rounded-full animate-pulse`} style={{ width: '75%' }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Logs detallados si están disponibles */}
+          {detailedStatus?.logs?.length > 0 && (
+            <div className="bg-elevated/50 rounded-lg p-3">
+              <p className="text-xs font-semibold text-muted mb-2">Actividad reciente:</p>
+              <div className="space-y-1 max-h-20 overflow-y-auto scrollbar-hide">
+                {detailedStatus.logs.slice(-5).reverse().map((log: any, i: number) => (
+                  <div key={i} className="text-xs text-muted flex items-start gap-2">
+                    <div className="w-1 h-1 rounded-full bg-accent mt-1.5 flex-shrink-0" />
+                    <span>{log.message || log}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Estado final */}
+          {done && (
+            <div className="text-center py-3 border-t border-border">
+              <i className="fas fa-check-circle text-success text-2xl mb-2" />
+              <p className="text-sm font-semibold text-success">¡Reporte listo para revisar!</p>
+            </div>
+          )}
+          {status?.status === 'failed' && (
+            <div className="text-center py-3 border-t border-border">
+              <i className="fas fa-exclamation-triangle text-danger text-2xl mb-2" />
+              <p className="text-sm font-semibold text-danger">El análisis falló. Por favor intenta nuevamente.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -493,6 +847,7 @@ export function Dashboard() {
   const [showPreview, setShowPreview]       = useState<number | null>(null);
   const [inputQuery, setInputQuery]         = useState('');
   const [pipelineTitle, setPipelineTitle]   = useState('');
+  const [pipelineReportId, setPipelineReportId] = useState<string | null>(null);
   const [disambCandidates, setDisambCandidates] = useState<GameCandidate[]>([]);
   const [isGenerating, setIsGenerating]     = useState(false);
 
@@ -568,10 +923,21 @@ export function Dashboard() {
     }
   }
 
-  function handleDisambiguationConfirm(game: GameCandidate) {
+async function handleDisambiguationConfirm(game: GameCandidate) {
     setShowDisamb(false);
     setPipelineTitle(game.name);
-    setShowPipeline(true);
+    setIsGenerating(true);
+
+    try {
+      const response = await apiClient.startPipeline(game.id);
+      setPipelineReportId(response.report_id);
+      setShowPipeline(true);
+    } catch (error) {
+      console.error('Failed to start pipeline:', error);
+      alert('Error starting pipeline. Please try again.');
+    } finally {
+      setIsGenerating(false);
+    }
   }
 
   const previewReport = showPreview !== null ? REPORTS.find((r) => r.id === showPreview) : null;
@@ -704,8 +1070,15 @@ export function Dashboard() {
       {showDisamb && (
         <DisambiguationModal query={pipelineTitle} candidates={disambCandidates} onClose={() => setShowDisamb(false)} onConfirm={handleDisambiguationConfirm} />
       )}
-      {showPipeline && (
-        <PipelineModal gameTitle={pipelineTitle} onClose={() => setShowPipeline(false)} onComplete={() => {}} />
+      {showPipeline && pipelineReportId && (
+        <PipelineModal 
+          gameTitle={pipelineTitle}
+          reportId={pipelineReportId}
+          onClose={() => { setShowPipeline(false); setPipelineReportId(null); }}
+          onComplete={(reportId) => {
+            window.location.href = `/pipeline/${reportId}`;
+          }}
+        />
       )}
       {previewReport && previewData && (
         <ReportPreviewModal report={previewReport} preview={previewData} onClose={() => setShowPreview(null)} />

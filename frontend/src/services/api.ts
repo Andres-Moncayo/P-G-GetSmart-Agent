@@ -1,9 +1,31 @@
-import axios from 'axios';
+import axios, { type AxiosRequestConfig } from 'axios';
 import type { UserProfile, ApiKey, UserPreferences } from '../types';
-import type { GameSearchResponse, GameConfirmResponse } from '../types/game';
+import type { GameSearchResponse, GameConfirmResponse, GameCandidate } from '../types/game';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const TOKEN_KEY = 'gs_access_token';
+
+// Utility to convert GameCandidate to scraper format
+function convertGameCandidateToScraperFormat(game: GameCandidate) {
+  // Generate a UUID for the game_id (browser-compatible)
+  const generateUUID = () => {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  };
+
+  return {
+    game_id: generateUUID(),
+    name: game.name,
+    release_year: game.release_year || new Date().getFullYear(),
+    igdb_id: 0,
+    rawg_id: game.rawg_id ? parseInt(game.rawg_id, 10) : 0,
+    steam_app_id: game.steam_app_id ? parseInt(game.steam_app_id, 10) : null,
+    aliases: []
+  };
+}
 
 class ApiClient {
   private client = axios.create({
@@ -102,6 +124,16 @@ class ApiClient {
     return response.data;
   }
 
+  async get<T = any>(path: string, config?: AxiosRequestConfig): Promise<T> {
+    const response = await this.client.get<T>(path, config);
+    return response.data;
+  }
+
+  async post<T = any>(path: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+    const response = await this.client.post<T>(path, data, config);
+    return response.data;
+  }
+
   async getProfile(): Promise<UserProfile> {
     const response = await this.client.get('/api/v1/me');
     return response.data;
@@ -133,13 +165,49 @@ class ApiClient {
     return response.data;
   }
 
-  async confirmGame(gameId: string, source: string = 'igdb'): Promise<GameConfirmResponse> {
+async confirmGame(gameId: string, source: string = 'rawg'): Promise<GameConfirmResponse> {
     const response = await this.client.post('/api/v1/games/confirm', {
       game_id: gameId,
       source,
     });
     return response.data;
   }
+
+async analyzeGame(gameData: {
+    game_id: string;
+    name: string;
+    release_year: number;
+    rawg_id: number;
+    steam_app_id?: number | null;
+    aliases?: string[];
+  }) {
+    const response = await this.client.post('/scraper/analyze', gameData);
+    return response.data;
+}
+
+async getReportStatus(reportId: string) {
+    const response = await this.client.get(`/scraper/api/v1/reports/${reportId}/status`);
+    return response.data;
+  }
+
+  async getPipelineStatus(reportId: string) {
+    const response = await this.client.get(`/api/v1/games/pipeline/${reportId}/status`);
+    return response.data;
+  }
+
+  async getPipelineLogs(reportId: string) {
+    const response = await this.client.get(`/api/v1/games/pipeline/${reportId}/logs`);
+    return response.data;
+  }
+
+  async startPipeline(gameId: string, source: string = 'rawg') {
+    const response = await this.client.post('/api/v1/games/pipeline/start', {
+      game_id: gameId,
+      source,
+    });
+    return response.data;
+  }
+
 }
 
 export const apiClient = new ApiClient();

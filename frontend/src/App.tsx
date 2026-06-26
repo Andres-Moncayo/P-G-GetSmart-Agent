@@ -4,6 +4,7 @@ import { useAuthStore } from './stores/authStore';
 import { LoginScreen } from './components/LoginScreen';
 import { Topbar } from './components/Topbar';
 import { Dashboard } from './pages/Dashboard';
+import PipelineProgressPage from './pages/PipelineProgressPage';
 
 function App() {
   const { isAuthenticated, isLoading, isInitialized, isLoggingOut, checkAuth } = useAuthStore();
@@ -67,12 +68,7 @@ function App() {
                 <p className="text-muted">Game analysis reports will appear here.</p>
               </div>
             } />
-            <Route path="/pipeline" element={
-              <div className="container mx-auto px-6 py-8">
-                <h2 className="text-2xl font-bold text-primary mb-4">Pipeline</h2>
-                <p className="text-muted">Data processing pipeline status.</p>
-              </div>
-            } />
+<Route path="/pipeline/:reportId" element={<PipelineProgressPage />} />
             <Route path="/templates" element={
               <div className="container mx-auto px-6 py-8">
                 <h2 className="text-2xl font-bold text-primary mb-4">Templates</h2>

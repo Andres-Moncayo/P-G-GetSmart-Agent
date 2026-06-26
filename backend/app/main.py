@@ -4,8 +4,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from .api.routes import router
 from .api.skills_routes import skills_router
 from .api.games_routes import games_router
+from .services.scraper.presentation.api import router as scraper_router
 from .tasks.cache_manager import CacheManager
 from .core.config import settings
+from .db.connection import create_database
 
 app = FastAPI(title="GetSmart API", version="3.0.0")
 
@@ -20,8 +22,10 @@ app.add_middleware(
 app.include_router(router)
 app.include_router(skills_router, prefix="/api")
 app.include_router(games_router)
+app.include_router(scraper_router, prefix="/scraper")
 
 
 @app.on_event("startup")
 async def startup():
     await CacheManager.init_cache()
+    await create_database()

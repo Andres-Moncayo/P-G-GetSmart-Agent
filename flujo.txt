@@ -1,0 +1,220 @@
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  PHASE 0 · DISAMBIGUATION (UI + Backend)                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Usuario escribe nombre del juego en el frontend React                      │
+│       ↓                                                                     │
+│  Frontend consulta IGDB API + RAWG API vía backend FastAPI                  │
+│       ↓                                                                     │
+│  Sistema devuelve lista de coincidencias (título, año, ID, plataformas)     │
+│       ↓                                                                     │
+│  Usuario selecciona el juego EXACTO (game_id, game_name, release_year)       │
+│       ↓                                                                     │
+│  → Se fija el target: ahora los 4 scrapers saben qué juego buscar           │
+└─────────────────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  PHASE 1 · PARALLEL SCRAPING (4 Workers Determinísticos)                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Cada scraper es INDEPENDIENTE y hace sus propias búsquedas:                │
+│                                                                             │
+│  ┌────────────────────┐  ┌────────────────────┐                            │
+│  │  SCRAPER 1         │  │  SCRAPER 2         │                            │
+│  │  scraper_design_art│  │  scraper_ux        │                            │
+│  │                    │  │                    │                            │
+│  │  APIs: IGDB, RAWG  │  │  APIs: IGDB, Steam │                            │
+│  │  Tavily queries:   │  │  Tavily queries:   │                            │
+│  │  • combat system   │  │  • UI design       │                            │
+│  │  • progression     │  │  • usability       │                            │
+│  │  • world design    │  │  • accessibility   │                            │
+│  │  • story, plot     │  │  • translation     │                            │
+│  │  • visual style    │  │                    │                            │
+│  │  • soundtrack      │  │                    │                            │
+│  │                    │  │                    │                            │
+│  │  → Output:         │  │  → Output:         │                            │
+│  │  Mini-Context      │  │  Mini-Context      │                            │
+│  │  design_art        │  │  user_experience   │                            │
+│  └────────────────────┘  └────────────────────┘                            │
+│  ┌────────────────────┐  ┌────────────────────┐                            │
+│  │  SCRAPER 3         │  │  SCRAPER 4         │                            │
+│  │  scraper_tech_sys  │  │  scraper_strategy    │                            │
+│  │                    │  │                    │                            │
+│  │  APIs: IGDB, Steam │  │  APIs: IGDB, RAWG, │                            │
+│  │  Tavily queries:   │  │  Steam, SteamSpy   │                            │
+│  │  • engine, perf    │  │  Tavily queries:   │                            │
+│  │  • netcode, servers│  │  • demographics    │                            │
+│  │  • ports, req      │  │  • monetization    │                            │
+│  │                    │  │  • retention, updates│                           │
+│  │                    │  │  • dev cost, team  │                            │
+│  │                    │  │  • campaign, trailers│                           │
+│  │                    │  │  • cultural phenom │                            │
+│  │                    │  │                    │                            │
+│  │  → Output:         │  │  → Output:         │                            │
+│  │  Mini-Context      │  │  Mini-Context      │                            │
+│  │  technology_systems│  │  strategy_market   │                            │
+│  └────────────────────┘  └────────────────────┘                            │
+│                                                                             │
+│  Cada scraper entrega:                                                      │
+│  • metadata (game_id, skill_id, worker_id, data_sources)                    │
+│  • hard_data (datos estructurados de sus APIs relevantes)                   │
+│  • semantic_data (fuentes Tavily organizadas por subcategoría)              │
+│  • evidence_count, confidence_score                                         │
+│                                                                             │
+│  NO hay un Master-JSON en esta fase. Cada scraper alimenta directamente     │
+│  a su skill correspondiente.                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  PHASE 2 · PARALLEL ANALYSIS (4 Macro-Skills via Celery)                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Cada Macro-Skill recibe SOLO su Mini-Context del scraper correspondiente:   │
+│                                                                             │
+│  ┌────────────────────┐  ┌────────────────────┐                            │
+│  │  SKILL 1           │  │  SKILL 2           │                            │
+│  │  design_art_skill  │  │  ux_skill          │                            │
+│  │  Gemini-2.5-flash  │  │  Gemini-2.5-flash  │                            │
+│  │  temp: 0.3         │  │  temp: 0.3         │                            │
+│  │  max_tokens: 8K    │  │  max_tokens: 6K    │                            │
+│  │                    │  │                    │                            │
+│  │  Input:            │  │  Input:            │                            │
+│  │  mini_contexts.    │  │  mini_contexts.    │                            │
+│  │  design_art        │  │  user_experience   │                            │
+│  │                    │  │                    │                            │
+│  │  5 categorías:     │  │  3 categorías:     │                            │
+│  │  • Gameplay        │  │  • UI/UX           │                            │
+│  │  • Level Design    │  │  • Accessibility   │                            │
+│  │  • Narrative       │  │  • Localization    │                            │
+│  │  • Art Direction   │  │                    │                            │
+│  │  • Sound Design    │  │                    │                            │
+│  │                    │  │                    │                            │
+│  │  → Output:         │  │  → Output:         │                            │
+│  │  JSON estructurado │  │  JSON estructurado │                            │
+│  │  con analysis,     │  │  con analysis,     │                            │
+│  │  summary, confidence│  │  summary, confidence│                           │
+│  └────────────────────┘  └────────────────────┘                            │
+│  ┌────────────────────┐  ┌────────────────────┐                            │
+│  │  SKILL 3           │  │  SKILL 4           │                            │
+│  │  tech_systems_skill│  │  strategy_market   │                            │
+│  │  Gemini-2.5-flash  │  │  Gemini-2.5-flash  │                            │
+│  │  temp: 0.3         │  │  temp: 0.3         │                            │
+│  │  max_tokens: 6K    │  │  max_tokens: 8K    │                            │
+│  │                    │  │                    │                            │
+│  │  Input:            │  │  Input:            │                            │
+│  │  mini_contexts.    │  │  mini_contexts.    │                            │
+│  │  technology_systems│  │  strategy_market   │                            │
+│  │                    │  │                    │                            │
+│  │  3 categorías:     │  │  6 categorías:     │                            │
+│  │  • Tech/Performance│  │  • Audience        │                            │
+│  │  • Multiplayer/Soc │  │  • Business Model  │                            │
+│  │  • Platforms/Dist  │  │  • Retention/Live  │                            │
+│  │                    │  │  • Production/Bus  │                            │
+│  │                    │  │  • Marketing         │                            │
+│  │                    │  │  • Cultural Impact   │                            │
+│  │                    │  │                    │                            │
+│  │  → Output:         │  │  → Output:         │                            │
+│  │  JSON estructurado │  │  JSON estructurado │                            │
+│  └────────────────────┘  └────────────────────┘                            │
+│                                                                             │
+│  Cada skill:                                                                │
+│  • ANALIZA (no copia) los datos crudos                                      │
+│  • Cita fuentes de semantic_data                                            │
+│  • Usa enums estrictos                                                     │
+│  • Reporta gaps con confidence scores ajustados                             │
+│  • Caché: 24h por game_id + hash de input                                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  PHASE 3 · CONSOLIDATION (Master-JSON Assembly)                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  AHORA se construye el Master-JSON, pero como AGREGACIÓN de los 4 outputs:  │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                         MASTER-JSON                                 │    │
+│  │  ┌─────────────────────────────────────────────────────────────┐   │    │
+│  │  │ metadata                                                    │   │    │
+│  │  │   game_id, game_name, generated_at, pipeline_version         │   │    │
+│  │  │   skills_completed: [design_art, ux, tech_systems,        │   │    │
+│  │  │                       strategy_market]                      │   │    │
+│  │  └─────────────────────────────────────────────────────────────┘   │    │
+│  │  ┌─────────────────────────────────────────────────────────────┐   │    │
+│  │  │ macro_outputs                                               │   │    │
+│  │  │   ├─ design_art        → JSON completo de la skill         │   │    │
+│  │  │   ├─ user_experience   → JSON completo de la skill         │   │    │
+│  │  │   ├─ technology_systems → JSON completo de la skill         │   │    │
+│  │  │   └─ strategy_market   → JSON completo de la skill         │   │    │
+│  │  └─────────────────────────────────────────────────────────────┘   │    │
+│  │  ┌─────────────────────────────────────────────────────────────┐   │    │
+│  │  │ hard_data_summary (denormalizado para el sintetizador)      │   │    │
+│  │  │   Key facts de cada skill para referencia rápida            │   │    │
+│  │  └─────────────────────────────────────────────────────────────┘   │    │
+│  │  ┌─────────────────────────────────────────────────────────────┐   │    │
+│  │  │ evidence_summary                                            │   │    │
+│  │  │   Total sources, overlap analysis, gap detection            │   │    │
+│  │  └─────────────────────────────────────────────────────────────┘   │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+│  Este Master-JSON es el INPUT del Sintetizador, no un paso previo.          │
+│  Contiene los 4 outputs completos + metadata de orquestación.               │
+└─────────────────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  PHASE 4 · SYNTHESIS (Sintetizador - Chief Editor)                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Input: Master-JSON (los 4 outputs de skills ya analizados)                │
+│  Modelo: Gemini-2.5-pro (temp: 0.2)                                        │
+│                                                                             │
+│  ┌─────────────────────────────────────────┐                                │
+│  │  PASO 1: Validar inputs               │                                │
+│  │  ¿4 skills presentes? ¿Schema válido?   │                                │
+│  │  ¿Al menos 2 skills con confianza ≥0.5?│                                │
+│  └─────────────────────────────────────────┘                                │
+│                    ↓                                                        │
+│  ┌─────────────────────────────────────────┐                                │
+│  │  PASO 2: Merge & deduplicar fuentes     │                                │
+│  │  Unificar URLs citadas, contar frecuencia│                               │
+│  └─────────────────────────────────────────┘                                │
+│                    ↓                                                        │
+│  ┌─────────────────────────────────────────┐                                │
+│  │  PASO 3: Resolver conflictos cross-skill │                                │
+│  │  Ej: Design dice "revolutionary",        │                                │
+│  │      Strategy dice "evolutionary"      │                                │
+│  │  → Jerarquía: autoridad > confianza >    │                                │
+│  │    recencia > presentar ambos            │                                │
+│  └─────────────────────────────────────────┘                                │
+│                    ↓                                                        │
+│  ┌─────────────────────────────────────────┐                                │
+│  │  PASO 4: Generar reporte unificado      │                                │
+│  │  • Executive Summary (400-600 palabras) │                                │
+│  │  • Thematic Analysis (17 categorías)    │                                │
+│  │  • Cross-Cutting Insights (5)           │                                │
+│  │  • Strategic Recommendations            │                                │
+│  │  • Risk Assessment                      │                                │
+│  │  • Appendices (fuentes, conflictos, gaps)│                               │
+│  └─────────────────────────────────────────┘                                │
+│                    ↓                                                        │
+│  ┌─────────────────────────────────────────┐                                │
+│  │  PASO 5: Generar 3 formatos de salida │                                │
+│  │                                         │                                │
+│  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐                      │
+│  │  │   JSON       │ │  MARKDOWN    │ │  PDF-HTML    │                      │
+│  │  │  (RAG-ready) │ │  (UI React)  │ │  (WeasyPrint)│                      │
+│  │  │              │ │              │ │              │                      │
+│  │  │ → PostgreSQL │ │ → PostgreSQL │ │ → PostgreSQL │                      │
+│  │  │ → ChromaDB   │ │ → React UI   │ │ → WeasyPrint │                      │
+│  │  │   (vectores) │ │   (lectura)  │ │   (PDF exec) │                      │
+│  │  └──────────────┘ └──────────────┘ └──────────────┘                      │
+│  └─────────────────────────────────────────┘                                │
+│                                                                             │
+│  Regla clave: Paridad semántica entre los 3 formatos                        │
+│  → El Markdown no puede añadir contenido que no esté en el JSON             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  ENTREGA FINAL                                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  UI React con tabs: JSON | Markdown | PDF Download                          │
+│  Usos: Presales, Onboarding, RAG, UX/Creatividad                           │
+└─────────────────────────────────────────────────────────────────────────────┘
