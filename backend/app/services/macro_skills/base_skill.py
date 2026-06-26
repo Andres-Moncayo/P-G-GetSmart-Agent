@@ -161,6 +161,8 @@ class BaseMacroSkill(abc.ABC):
 
         try:
             result = await self._call_model(prompt)
+            if not isinstance(result, dict) or "metadata" not in result or "analysis" not in result:
+                raise ValueError("Model returned incomplete or mock schema")
         except (RetryError, Exception) as exc:
             logger.error("%s analysis failed for %s: %s", self.skill_id, game_id, exc)
             return self._fallback_output(game_id, game_name)
