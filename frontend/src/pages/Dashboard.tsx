@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { DATE_FILTERS } from '../data/gameData';
 import type { Report, GameCandidate, ApiReport, ApiReportListResponse } from '../types/game';
 import { apiClient } from '../services/api';
@@ -226,6 +225,177 @@ function ReportCard({ report, onClick }: ReportCardProps) {
   );
 }
 
+// ─── PipelineModal ───────────────────────────────────────────────────────────
+
+const PIPELINE_PHASES = [
+  { key: 'scraping',  label: 'Scraping'   },
+  { key: 'analysis',  label: 'Analysis'   },
+  { key: 'synthesis', label: 'Synthesis'  },
+  { key: 'storage',   label: 'Storage'    },
+];
+
+interface PipelineModalProps {
+  reportId: string;
+  gameName: string;
+  onClose: () => void;
+  onComplete: () => void;
+}
+
+function PipelineModal({ reportId, gameName, onClose, onComplete }: PipelineModalProps) {
+  const [pipelineData, setPipelineData] = useState<any>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const doneRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function poll() {
+      while (!cancelled) {
+        try {
+          const data = await apiClient.getPipelineStatus(reportId);
+          if (cancelled) return;
+          setPipelineData(data);
+          if (data.is_complete && !doneRef.current) {
+            doneRef.current = true;
+            onComplete();
+            return;
+          }
+          if (data.status === 'failed' && !doneRef.current) {
+            setErrorMsg(data.message || 'Pipeline failed');
+            return;
+          }
+        } catch {
+          // keep retrying silently
+        }
+        if (!cancelled) await new Promise<void>(r => setTimeout(r, 3000));
+      }
+    }
+
+    poll();
+    return () => { cancelled = true; };
+  }, [reportId, onComplete]);
+
+  const overall   = pipelineData?.overall_progress ?? 0;
+  const phases    = pipelineData?.phases ?? {};
+  const currentMsg = pipelineData?.message ?? 'Starting pipeline…';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+      <div className="bg-surface border border-border rounded-2xl w-full max-w-md mx-4 shadow-modal">
+        {/* Header */}
+        <div className="p-5 border-b border-border flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs text-warning font-medium uppercase tracking-wider mb-1 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-warning dot-pulse inline-block" />
+              Pipeline Running
+            </p>
+            <h3 className="text-base font-bold text-primary truncate">{gameName}</h3>
+            <p className="text-xs text-muted mt-0.5 truncate">{currentMsg}</p>
+          </div>
+          <button
+            onClick={onClose}
+            title="Minimize — pipeline continues in background"
+            className="text-muted hover:text-primary flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-elevated transition-colors"
+          >
+            <i className="fas fa-minus text-xs" />
+          </button>
+        </div>
+
+        {/* Overall progress bar */}
+        <div className="px-5 pt-4">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs text-muted">Overall Progress</span>
+            <span className="text-xs font-semibold text-primary">{overall}%</span>
+          </div>
+          <div className="h-2 bg-elevated rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-warning to-amber-300 rounded-full transition-all duration-700"
+              style={{ width: `${overall}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Phase list */}
+        <div className="p-5 space-y-4">
+          {PIPELINE_PHASES.map(({ key, label }, idx) => {
+            const ph = phases[key] ?? {};
+            const st = ph.status ?? 'waiting';
+            const pr = ph.progress ?? 0;
+            const isRunning  = st === 'running';
+            const isDonePhase = st === 'completed';
+            const isFailed   = st === 'failed';
+            const isSkipped  = st === 'skipped';
+
+            return (
+              <div key={key} className="flex items-center gap-3">
+                {/* Status icon */}
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-xs ${
+                  isDonePhase ? 'bg-success/15 text-success' :
+                  isFailed    ? 'bg-error/15 text-error'    :
+                  isSkipped   ? 'bg-elevated text-muted'    :
+                  isRunning   ? 'bg-warning/15 text-warning' :
+                                'bg-elevated text-disabled'
+                }`}>
+                  {isDonePhase ? <i className="fas fa-check" /> :
+                   isFailed    ? <i className="fas fa-times" /> :
+                   isSkipped   ? <i className="fas fa-forward text-[10px]" /> :
+                   isRunning   ? <div className="w-3.5 h-3.5 border-2 border-warning/30 border-t-warning rounded-full animate-spin" /> :
+                                 <span className="font-bold text-[10px]">{idx + 1}</span>}
+                </div>
+
+                {/* Label + progress */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={`text-xs font-medium ${
+                      isDonePhase ? 'text-success' :
+                      isFailed    ? 'text-error'   :
+                      isRunning   ? 'text-warning'  :
+                                    'text-disabled'
+                    }`}>{label}</span>
+                    <span className="text-xs text-muted">
+                      {isDonePhase ? 'Done'   :
+                       isFailed    ? 'Failed' :
+                       isSkipped   ? 'Skipped':
+                       isRunning   ? `${pr}%` : ''}
+                    </span>
+                  </div>
+                  {isRunning && (
+                    <div className="h-1 bg-elevated rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-warning rounded-full transition-all duration-500"
+                        style={{ width: `${pr}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 pb-5">
+          {errorMsg ? (
+            <>
+              <div className="bg-error/10 border border-error/20 rounded-lg p-3 mb-3">
+                <p className="text-xs text-error">{errorMsg}</p>
+              </div>
+              <button onClick={onClose} className="w-full py-2 rounded-lg border border-border text-sm text-muted hover:text-primary transition-colors">
+                Close
+              </button>
+            </>
+          ) : (
+            <p className="text-xs text-disabled text-center">
+              <i className="fas fa-info-circle mr-1 text-muted" />
+              You can minimize this — the pipeline continues in the background
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── DisambiguationModal ─────────────────────────────────────────────────────
 
 interface DisambiguationModalProps {
@@ -362,7 +532,8 @@ export function Dashboard() {
   const [facets, setFacets]                   = useState<ApiReportListResponse['facets'] | null>(null);
   const [isLoadingReports, setIsLoadingReports] = useState(false);
   const [isGenerating, setIsGenerating]       = useState(false);
-  const navigate = useNavigate();
+  const [showPipeline, setShowPipeline]       = useState(false);
+  const [pipelineReportId, setPipelineReportId] = useState<string | null>(null);
 
   async function loadReports() {
     setIsLoadingReports(true);
@@ -443,16 +614,22 @@ export function Dashboard() {
   async function handleDisambiguationConfirm(game: GameCandidate) {
     setShowDisamb(false);
     setIsGenerating(true);
-
     try {
       const response = await apiClient.startPipeline(game.id);
-      navigate(`/pipeline/${response.report_id}`);
+      setPipelineReportId(response.report_id);
+      setShowPipeline(true);
     } catch (error) {
       console.error('Failed to start pipeline:', error);
       alert('Error starting pipeline. Please try again.');
     } finally {
       setIsGenerating(false);
     }
+  }
+
+  function handlePipelineComplete() {
+    setShowPipeline(false);
+    setPipelineReportId(null);
+    loadReports();
   }
 
   const totalCompleted = reports.filter((r) => r.status !== 'processing').length;
@@ -585,6 +762,15 @@ export function Dashboard() {
 
       {showDisamb && (
         <DisambiguationModal query={pipelineTitle} candidates={disambCandidates} onClose={() => setShowDisamb(false)} onConfirm={handleDisambiguationConfirm} />
+      )}
+
+      {showPipeline && pipelineReportId && (
+        <PipelineModal
+          reportId={pipelineReportId}
+          gameName={pipelineTitle}
+          onClose={() => setShowPipeline(false)}
+          onComplete={handlePipelineComplete}
+        />
       )}
     </div>
   );

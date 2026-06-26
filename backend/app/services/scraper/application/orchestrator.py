@@ -458,12 +458,57 @@ async def run_complete_pipeline_with_db(game_payload: dict[str, Any], tracker_re
                 await pipeline_tracker.start_phase(tracker_id, Phase.STORAGE)
                 await pipeline_tracker.update_phase_progress(tracker_id, 5.0, "Phase 4 storage started")
 
+            # Enrich master_json with the structured JSONB sections the DB expects.
+            # Phase 2 only produces game_info + macro_skill_analyses; Phase 3
+            # produces the synthesis. We combine both into the canonical shape.
+            synth_meta = {}
+            synth_confidence = None
+            if synthesis_result and synthesis_result.get("status") != "failed":
+                synth_meta = synthesis_result.get("metadata", {})
+                synth_confidence = synthesis_result.get("confidence")
+
+            skill_scores = {}
+            for skill in (master_json.get("macro_skill_analyses") or []):
+                if isinstance(skill, dict):
+                    name = skill.get("skill_name") or skill.get("metadata", {}).get("skill_name", "")
+                    score = (skill.get("metadata") or {}).get("confidence_score") or skill.get("score")
+                    if name:
+                        skill_scores[name] = score
+
+            enriched_master_json = {
+                **master_json,
+                "executive_summary": {
+                    "game_name": game_name,
+                    "overall_confidence": synth_confidence,
+                    "synthesis_status": (synthesis_result or {}).get("status"),
+                    "key_analyses": list(skill_scores.keys()),
+                    "word_count": (synthesis_result or {}).get("word_count", 0),
+                },
+                "thematic_analysis": {
+                    "macro_skill_analyses": master_json.get("macro_skill_analyses", []),
+                    "skill_scores": skill_scores,
+                },
+                "strategic_recommendations": synth_meta,
+                "risk_assessment": master_json.get("analysis_metadata", {}),
+                "confidence_analysis": {
+                    "overall_confidence": synth_confidence,
+                    "skill_scores": skill_scores,
+                    "analysis_metadata": master_json.get("analysis_metadata", {}),
+                },
+                "metadata": {
+                    "overall_confidence": synth_confidence,
+                    "game_name": game_name,
+                    "game_id": game_id,
+                    **synth_meta,
+                },
+            }
+
             saved_report = await report_service.save_analysis_results(
                 db_report_id,
                 game_id,
                 game_name,
                 platform,
-                master_json,
+                enriched_master_json,
                 synthesis_content,
             )
 
