@@ -475,7 +475,7 @@ async def run_complete_pipeline_with_db(game_payload: dict[str, Any], tracker_re
             logger.info(f"Phase 4 completed: Report saved to database with ID {saved_report.id}")
             if tracker_id and tracker_id in pipeline_tracker.active_pipelines:
                 pipeline_tracker.active_pipelines[tracker_id]["result"] = db_storage_result
-                pipeline_tracker.active_pipelines[tracker_id]["db_report_id"] = saved_report.id
+                pipeline_tracker.active_pipelines[tracker_id]["db_report_id"] = str(saved_report.id)
             if tracker_id:
                 await pipeline_tracker.update_phase_progress(tracker_id, 100.0, "Phase 4 storage completed")
                 await pipeline_tracker.complete_phase(tracker_id, Phase.STORAGE)

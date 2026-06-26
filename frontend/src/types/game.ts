@@ -1,16 +1,60 @@
-export type ReportStatus = 'completed' | 'processing' | 'queued';
+export type ReportStatus = 'completed' | 'processing' | 'queued' | 'pending' | 'failed';
 
 export interface Report {
-  id: number;
+  id: string;
   title: string;
   developer: string;
   year: number;
   genre: string;
   status: ReportStatus;
-  platforms: string[];
+  platforms: string[];      // FontAwesome class strings for display
+  platformNames: string[];  // raw platform names for filtering
   time: string;
+  createdAt: string;        // ISO date string
   image: string;
   progress?: number;
+}
+
+// ─── API Response Types ───────────────────────────────────────────────────────
+
+export interface ApiGame {
+  id: string;
+  name: string;
+  developer: string | null;
+  release_year: number | null;
+  primary_genre: string | null;
+  primary_platform: string | null;
+  all_genres: string[];
+  all_platforms: string[];
+  cover_url: string | null;
+  slug: string | null;
+}
+
+export interface ApiReport {
+  id: string;
+  status: 'completed' | 'processing' | 'pending' | 'failed';
+  game: ApiGame;
+  created_at: string;
+  updated_at: string;
+  confidence_score: number | null;
+  tags: string[];
+  current_phase: string | null;
+  pipeline_progress: number;
+  executive_summary?: Record<string, any>;
+  thematic_analysis?: Record<string, any>;
+  strategic_recommendations?: Record<string, any>;
+  game_data?: Record<string, any>;
+}
+
+export interface ApiReportListResponse {
+  items: ApiReport[];
+  pagination: { page: number; page_size: number; total: number; total_pages: number };
+  facets: {
+    genre: { value: string; count: number }[];
+    platform: { value: string; count: number }[];
+    developer: { value: string; count: number }[];
+    status: { value: string; count: number }[];
+  };
 }
 
 export interface MacroSkill {

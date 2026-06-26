@@ -1,6 +1,6 @@
 import axios, { type AxiosRequestConfig } from 'axios';
 import type { UserProfile, ApiKey, UserPreferences } from '../types';
-import type { GameSearchResponse, GameConfirmResponse, GameCandidate } from '../types/game';
+import type { GameSearchResponse, GameConfirmResponse, GameCandidate, ApiReport, ApiReportListResponse } from '../types/game';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const TOKEN_KEY = 'gs_access_token';
@@ -221,6 +221,28 @@ async getReportStatus(reportId: string) {
       game_id: gameId,
       source,
     });
+    return response.data;
+  }
+
+  async getReports(params?: {
+    genre?: string[];
+    developer?: string[];
+    platform?: string[];
+    status?: string[];
+    year_from?: number;
+    year_to?: number;
+    search?: string;
+    sort_by?: string;
+    sort_dir?: 'asc' | 'desc';
+    page?: number;
+    page_size?: number;
+  }): Promise<ApiReportListResponse> {
+    const response = await this.client.get('/api/v1/reports', { params });
+    return response.data;
+  }
+
+  async getReportDetail(reportId: string): Promise<ApiReport> {
+    const response = await this.client.get(`/api/v1/reports/${reportId}`);
     return response.data;
   }
 
