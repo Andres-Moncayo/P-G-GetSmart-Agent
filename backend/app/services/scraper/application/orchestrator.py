@@ -462,10 +462,15 @@ async def run_complete_pipeline_with_db(game_payload: dict[str, Any], tracker_re
             # Phase 2 only produces game_info + macro_skill_analyses; Phase 3
             # produces the synthesis. We combine both into the canonical shape.
             synth_meta = {}
-            synth_confidence = None
-            if synthesis_result and synthesis_result.get("status") != "failed":
+            # Prefer synthesis confidence; fall back to Phase 2 average
+            phase2_avg_confidence = master_json.get("analysis_metadata", {}).get("average_confidence")
+            synth_confidence = (
+                synthesis_result.get("confidence")
+                if synthesis_result and synthesis_result.get("confidence") is not None
+                else phase2_avg_confidence
+            )
+            if synthesis_result and synthesis_result.get("status") not in ("failed", None):
                 synth_meta = synthesis_result.get("metadata", {})
-                synth_confidence = synthesis_result.get("confidence")
 
             skill_scores = {}
             for skill in (master_json.get("macro_skill_analyses") or []):
