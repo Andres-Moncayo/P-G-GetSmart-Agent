@@ -8,6 +8,7 @@ durable DB state only.
 
 import uuid
 import logging
+from datetime import datetime
 from typing import Optional, Dict, Any, List
 
 from ..db.connection import AsyncSessionLocal
@@ -122,6 +123,7 @@ class ReportService:
         markdown_content: str,
         user_id: str = DEMO_USER_ID,
         ai_results: Optional[Dict[str, Any]] = None,
+        started_at: Optional[datetime] = None,
     ) -> Report:
         """Persist synthesis output and create per-skill Analysis rows."""
         await self._init()
@@ -165,7 +167,7 @@ class ReportService:
 
         # Update the report row with the final result
         report = await self._report_repo.save_synthesis_result(
-            report_id, master_json, markdown_content
+            report_id, master_json, markdown_content, started_at=started_at
         )
         return report
 

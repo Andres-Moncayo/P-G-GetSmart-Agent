@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { DATE_FILTERS } from '../data/gameData';
 import type { Report, GameCandidate, ApiReport, ApiReportListResponse } from '../types/game';
 import { apiClient } from '../services/api';
@@ -361,6 +362,7 @@ export function Dashboard() {
   const [facets, setFacets]                   = useState<ApiReportListResponse['facets'] | null>(null);
   const [isLoadingReports, setIsLoadingReports] = useState(false);
   const [isGenerating, setIsGenerating]       = useState(false);
+  const navigate = useNavigate();
 
   async function loadReports() {
     setIsLoadingReports(true);
@@ -443,8 +445,8 @@ export function Dashboard() {
     setIsGenerating(true);
 
     try {
-      await apiClient.startPipeline(game.id);
-      await loadReports();
+      const response = await apiClient.startPipeline(game.id);
+      navigate(`/pipeline/${response.report_id}`);
     } catch (error) {
       console.error('Failed to start pipeline:', error);
       alert('Error starting pipeline. Please try again.');

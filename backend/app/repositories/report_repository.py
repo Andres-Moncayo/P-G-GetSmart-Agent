@@ -45,21 +45,31 @@ class ReportRepository:
         return report
 
     async def save_synthesis_result(
-        self, report_id: str, master_json: Dict[str, Any], markdown_content: str
+        self,
+        report_id: str,
+        master_json: Dict[str, Any],
+        markdown_content: str,
+        started_at: Optional[datetime] = None,
     ) -> Optional[Report]:
         """Update an existing report row with the final synthesis output."""
         meta = master_json.get("metadata", {})
         confidence = meta.get("overall_confidence") or meta.get("confidence_score")
         summary = (markdown_content[:500] + "...") if len(markdown_content) > 500 else markdown_content
+        now = datetime.now(timezone.utc)
+        processing_ms = (
+            int((now - started_at).total_seconds() * 1000) if started_at else None
+        )
 
         update_data = {
             "report_status": "completed",
             "markdown_content": markdown_content,
             "markdown_summary": summary,
+            "markdown_generated": bool(markdown_content),
             "confidence_score": confidence,
-            "completed_at": datetime.now(timezone.utc),
+            "completed_at": now,
             "current_phase": "completed",
             "pipeline_progress": 100,
+            "processing_time_ms": processing_ms,
             # Structured JSONB sections from master_json
             "executive_summary_jsonb": master_json.get("executive_summary", {}),
             "thematic_analysis_jsonb": master_json.get("thematic_analysis", {}),

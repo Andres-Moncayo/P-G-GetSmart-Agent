@@ -250,9 +250,14 @@ class ReportService:
 
     def _row_to_report(self, row) -> Report:
         status_value = getattr(row, "report_status", "completed")
-        progress = 100 if status_value == "completed" else (
-            50 if status_value == "processing" else 10 if status_value == "queued" else 0
-        )
+        pipeline_progress = getattr(row, "pipeline_progress", None)
+        if pipeline_progress is None:
+            pipeline_progress = 100 if status_value == "completed" else (
+                50 if status_value == "processing" else 10 if status_value == "queued" else 0
+            )
+
+        all_genres = list(getattr(row, "all_genres", None) or [])
+        all_platforms = list(getattr(row, "all_platforms", None) or [])
 
         game = Game(
             id=str(row.game_id),
@@ -260,27 +265,12 @@ class ReportService:
             slug=getattr(row, "game_slug", None),
             release_year=getattr(row, "release_year", None),
             developer=getattr(row, "developer_name", None),
-            genres=list(row.all_genres or []),
-            platforms=list(row.all_platforms or []),
+            primary_genre=getattr(row, "primary_genre", None),
+            primary_platform=getattr(row, "primary_platform", None),
+            all_genres=all_genres,
+            all_platforms=all_platforms,
+            cover_url=getattr(row, "cover_url", None),
         )
-
-        outputs = {}
-        if getattr(row, "url_markdown", None):
-            outputs["markdown_url"] = row.url_markdown
-        if getattr(row, "url_pdf", None):
-            outputs["pdf_url"] = row.url_pdf
-        if getattr(row, "url_json", None):
-            outputs["json_url"] = row.url_json
-        if getattr(row, "url_json_rag", None):
-            outputs["json_rag_url"] = row.url_json_rag
-
-        metadata: Dict[str, Any] = {}
-        if getattr(row, "completed_at", None):
-            metadata["completed_at"] = row.completed_at.isoformat()
-        if getattr(row, "processing_time_ms", None):
-            metadata["duration_seconds"] = row.processing_time_ms // 1000
-        if getattr(row, "report_metadata_jsonb", None):
-            metadata.update(dict(row.report_metadata_jsonb))
 
         updated_at = getattr(row, "updated_at", None) or row.created_at
 
@@ -288,12 +278,10 @@ class ReportService:
             id=str(row.id),
             game=game,
             status=status_value,
-            current_phase=None,
-            progress_percent=progress,
-            outputs=outputs,
-            metadata=metadata,
-            summary=None,
-            tags=list(row.tags or []),
+            current_phase=getattr(row, "current_phase", None),
+            pipeline_progress=pipeline_progress,
+            confidence_score=getattr(row, "confidence_score", None),
+            tags=list(getattr(row, "tags", None) or []),
             created_at=row.created_at,
             updated_at=updated_at,
         )
