@@ -486,10 +486,13 @@ class PipelineTracker:
             current_task=None,  # Could be enhanced to track current active task
             logs=recent_logs,
             
-            # Performance metrics
+# Performance metrics
             scraping_durations=pipeline["metrics"]["scraping_durations"],
             analysis_durations=pipeline["metrics"]["analysis_durations"],
-            total_records_processed=pipeline["metrics"]["total_records_processed"]
+            total_records_processed=pipeline["metrics"]["total_records_processed"],
+            
+            # Database integration
+            db_report_id=pipeline.get("db_report_id")
         )
     
     def archive_pipeline(self, report_id: str) -> None:

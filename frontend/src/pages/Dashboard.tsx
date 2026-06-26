@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { REPORTS, REPORT_PREVIEWS, GENRE_FILTERS, DEV_FILTERS, PLATFORM_FILTERS, DATE_FILTERS, REPORT_DATES } from '../data/gameData';
 import type { Report, ReportPreview, GameCandidate } from '../types/game';
 import { apiClient } from '../services/api';
@@ -356,7 +356,7 @@ interface PipelineStatus {
   }>;
 }
 
-interface PipelineModalProps { gameTitle: string; reportId: string; onClose: () => void; onComplete: (reportId: string) => void; }
+interface PipelineModalProps { gameTitle: string; reportId: string; onClose: () => void; onComplete: (reportId: string, dbReportId?: number) => void; }
 function PipelineModal({ gameTitle, reportId, onClose, onComplete }: PipelineModalProps) {
   const [currentPhase, setCurrentPhase] = useState(0);
   const [progress, setProgress] = useState(5);
@@ -411,12 +411,12 @@ function PipelineModal({ gameTitle, reportId, onClose, onComplete }: PipelineMod
           // Detailed logs might not be available yet
         }
         
-        if (statusData.status === 'completed' || statusData.status === 'done') {
+if (statusData.status === 'completed' || statusData.status === 'done') {
           setProgress(100);
           setDone(true);
           setCurrentPhase(4);
           setTimeout(() => {
-            onComplete(reportId);
+            onComplete(reportId, statusData.db_report_id);
             onClose();
           }, 2000);
           clearInterval(pollInterval);
@@ -844,28 +844,52 @@ export function Dashboard() {
 
   const [showDisamb, setShowDisamb]         = useState(false);
   const [showPipeline, setShowPipeline]     = useState(false);
-  const [showPreview, setShowPreview]       = useState<number | null>(null);
+  const [showPreview, setShowPreview]       = useState<string | null>(null);
   const [inputQuery, setInputQuery]         = useState('');
   const [pipelineTitle, setPipelineTitle]   = useState('');
   const [pipelineReportId, setPipelineReportId] = useState<string | null>(null);
   const [disambCandidates, setDisambCandidates] = useState<GameCandidate[]>([]);
+const [reports, setReports]               = useState<Report[]>([]);
+  const [isLoadingReports, setIsLoadingReports] = useState(false);
   const [isGenerating, setIsGenerating]     = useState(false);
+  const navigate = useNavigate();
+
+  // Load reports from API
+  useEffect(() => {
+    async function loadReports() {
+      setIsLoadingReports(true);
+      try {
+        // TODO: Create API endpoint for fetching reports
+        // const apiReports = await apiClient.getReports();
+        // setReports(apiReports);
+        
+        // For now, use the hardcoded data but load it into state
+        setReports(REPORTS);
+      } catch (error) {
+        console.error('Failed to load reports:', error);
+      } finally {
+        setIsLoadingReports(false);
+      }
+    }
+
+    loadReports();
+  }, []);
 
   function toggle<T>(arr: T[], val: T): T[] {
     return arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val];
   }
 
-  // In-pipeline games — shown in dedicated section, also search-filtered
+// In-pipeline games — shown in dedicated section, also search-filtered
   const inPhaseReports = useMemo(() => {
-    const processing = REPORTS.filter((r) => r.status === 'processing');
+    const processing = reports.filter((r) => r.status === 'processing');
     if (!search.trim()) return processing;
     const q = search.toLowerCase();
     return processing.filter((r) => r.title.toLowerCase().includes(q) || r.developer.toLowerCase().includes(q));
-  }, [search]);
+  }, [search, reports]);
 
   // Completed games — main grid
   const filteredReports = useMemo(() => {
-    let list = REPORTS.filter((r) => r.status !== 'processing');
+    let list = reports.filter((r) => r.status !== 'processing');
 
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -940,10 +964,10 @@ async function handleDisambiguationConfirm(game: GameCandidate) {
     }
   }
 
-  const previewReport = showPreview !== null ? REPORTS.find((r) => r.id === showPreview) : null;
+const previewReport = showPreview !== null ? reports.find((r) => r.id === showPreview) : null;
   const previewData   = showPreview !== null ? REPORT_PREVIEWS[showPreview] : null;
 
-  const totalCompleted = REPORTS.filter((r) => r.status !== 'processing').length;
+  const totalCompleted = reports.filter((r) => r.status !== 'processing').length;
 
   return (
     <div className="flex flex-col h-full">
@@ -1075,8 +1099,12 @@ async function handleDisambiguationConfirm(game: GameCandidate) {
           gameTitle={pipelineTitle}
           reportId={pipelineReportId}
           onClose={() => { setShowPipeline(false); setPipelineReportId(null); }}
-          onComplete={(reportId) => {
-            window.location.href = `/pipeline/${reportId}`;
+          onComplete={(reportId, dbReportId) => {
+            if (dbReportId) {
+              navigate(`/pipeline/${reportId}?db_report_id=${dbReportId}`);
+            } else {
+              navigate(`/pipeline/${reportId}`);
+            }
           }}
         />
       )}

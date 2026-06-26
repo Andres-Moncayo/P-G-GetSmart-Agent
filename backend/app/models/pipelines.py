@@ -70,6 +70,9 @@ class DetailedPipelineResponse(BaseModel):
     message: str = Field(..., description="Current status message")
     result: Optional[Dict[str, Any]] = None
     
+    # Database integration
+    db_report_id: Optional[int] = Field(None, description="Database report record ID")
+    
     # Progress tracking
     seconds_elapsed: float = 0.0
     seconds_remaining: Optional[float] = None
@@ -88,7 +91,7 @@ class DetailedPipelineResponse(BaseModel):
     current_task: Optional[str] = None
     logs: List[Dict[str, Any]] = Field(default_factory=list)
     
-# Performance metrics
+    # Performance metrics
     scraping_durations: Dict[str, float] = Field(default_factory=dict)
     analysis_durations: Dict[str, float] = Field(default_factory=dict)
     total_records_processed: int = 0

@@ -5,6 +5,22 @@ import type { GameSearchResponse, GameConfirmResponse, GameCandidate } from '../
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const TOKEN_KEY = 'gs_access_token';
 
+// Callback for navigation to avoid React Router conflicts
+let authRedirectCallback: (() => void) | null = null;
+
+export const setAuthRedirectCallback = (callback: () => void) => {
+  authRedirectCallback = callback;
+};
+
+const handleAuthRedirect = () => {
+  if (authRedirectCallback) {
+    authRedirectCallback();
+  } else {
+    // Fallback to window.location if no callback is set
+    window.location.href = '/';
+  }
+};
+
 // Utility to convert GameCandidate to scraper format
 function convertGameCandidateToScraperFormat(game: GameCandidate) {
   // Generate a UUID for the game_id (browser-compatible)
@@ -68,16 +84,16 @@ class ApiClient {
                 localStorage.setItem(TOKEN_KEY, refreshData.data.access_token);
               }
               return this.client.request(originalConfig);
-            } catch {
+} catch {
               this.clearAuthState();
-              window.location.href = '/';
+              handleAuthRedirect();
             }
           }
         }
 
-        if (isRefreshRequest && error.response?.status === 401) {
+if (isRefreshRequest && error.response?.status === 401) {
           this.clearAuthState();
-          window.location.href = '/';
+          handleAuthRedirect();
         }
 
         return Promise.reject(error);

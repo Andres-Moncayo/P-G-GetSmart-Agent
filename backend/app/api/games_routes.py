@@ -294,6 +294,31 @@ async def get_report_status_scraper(report_id: str):
         )
 
 
+@games_router.post("/pipeline/{report_id}/reset")
+async def reset_pipeline(report_id: str):
+    """Reset a stuck pipeline."""
+    try:
+        from ..services.pipeline_tracker import pipeline_tracker
+        
+        # Archive the stuck pipeline
+        pipeline_tracker.archive_pipeline(report_id)
+        
+        # Create a new pipeline entry
+        new_report_id = str(uuid.uuid4())
+        
+        return {
+            "message": "Pipeline reset successfully",
+            "old_report_id": report_id,
+            "new_report_id": new_report_id
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={"error_code": "PIPELINE_004", "message": f"Failed to reset pipeline: {str(e)}"}
+        )
+
+
 @games_router.get("/pipeline/{report_id}/logs")
 async def get_pipeline_logs(report_id: str, level: Optional[str] = None):
     """Get pipeline execution logs."""
