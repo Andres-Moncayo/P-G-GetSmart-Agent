@@ -71,12 +71,12 @@ async def search_games(
             detail={"error_code": "SEARCH_001", "message": "Invalid characters in query"},
         )
 
-    if not settings.rawg_api_key:
+    if not settings.rawg_api_key and not (settings.igdb_client_id and settings.igdb_client_secret):
         raise HTTPException(
             status_code=503,
             detail={
                 "error_code": "SEARCH_002",
-                "message": "No game data API key configured. Set RAWG_API_KEY in .env",
+                "message": "No game data API keys configured. Set RAWG_API_KEY or IGDB_CLIENT_ID + IGDB_CLIENT_SECRET in .env",
             },
         )
 
@@ -202,6 +202,8 @@ async def start_pipeline(body: PipelineStartRequest):
         report_id = str(uuid.uuid4())
         
         # Convert cached candidate into the backend scraper payload expected by the real orchestrator
+        genres = game.get("genres") or []
+        platforms = game.get("platforms") or []
         scraper_request = {
             "game_id": game.get("id"),
             "name": game.get("name"),
@@ -210,6 +212,13 @@ async def start_pipeline(body: PipelineStartRequest):
             "rawg_id": int(game.get("rawg_id")) if game.get("rawg_id") and str(game.get("rawg_id")).isdigit() else None,
             "steam_app_id": int(game.get("steam_app_id")) if game.get("steam_app_id") and str(game.get("steam_app_id")).isdigit() else None,
             "aliases": game.get("aliases", []),
+            # Extra metadata forwarded to Phase 4 DB row
+            "developer_name": game.get("developer"),
+            "primary_genre": genres[0] if genres else None,
+            "primary_platform": platforms[0] if platforms else None,
+            "all_genres": genres,
+            "all_platforms": platforms,
+            "cover_url": game.get("cover_url") or game.get("background_image"),
         }
         
         # Create pipeline tracker entry immediately so status/logs are available right away

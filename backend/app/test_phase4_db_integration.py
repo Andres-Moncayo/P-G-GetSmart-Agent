@@ -13,10 +13,15 @@ import pytest
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from app.models.report import AnalysisReport, PipelineStatus, RawAnalysisData
-from app.repositories.report_repository import ReportRepository, PipelineStatusRepository, RawDataRepository
+from app.models.report import Report as ReportORM, Analysis as AnalysisORM
+from app.repositories.report_repository import ReportRepository, AnalysisRepository
 from app.services.report_service import ReportService
 from app.db.connection import get_async_session
+
+# Aliases kept so existing test bodies compile without full rewrite
+AnalysisReport = ReportORM
+PipelineStatus = None
+RawAnalysisData = None
 
 
 @pytest.fixture
@@ -35,14 +40,14 @@ async def report_repository(test_db_session):
 
 @pytest.fixture
 async def pipeline_repository(test_db_session):
-    """Create pipeline status repository for testing."""
-    return PipelineStatusRepository(test_db_session)
+    """Stub — PipelineStatusRepository replaced by inline update on reports table."""
+    return None
 
 
 @pytest.fixture
 async def raw_data_repository(test_db_session):
-    """Create raw data repository for testing."""
-    return RawDataRepository(test_db_session)
+    """Stub — RawDataRepository replaced by Analysis rows."""
+    return AnalysisRepository(test_db_session)
 
 
 @pytest.fixture

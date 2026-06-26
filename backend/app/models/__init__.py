@@ -3,12 +3,14 @@ Models package exports.
 """
 
 from .base import Base
-from .report import AnalysisReport, PipelineStatus, RawAnalysisData
+# ORM models aligned with UnityGsmart.sql. Imported under aliases so they don't
+# shadow the legacy pydantic `Report` model defined below (used by services/__init__.py).
+from .report import Report as ReportORM, Analysis as AnalysisORM
 from .synthesis_models import (
     SynthesisAnalysis, SynthesisInput, SynthesisOutput, 
     SynthesisQualityMetrics, SynthesisCacheEntry, SynthesisJob
 )
-from .user import User, ApiKey
+from .user import User, ApiKey, Role
 
 # Legacy models for backwards compatibility - temporary fix
 from typing import Optional, List, Any
@@ -70,9 +72,8 @@ class ReportListResponse(BaseModel):
 
 __all__ = [
     "Base",
-    "AnalysisReport", 
-    "PipelineStatus",
-    "RawAnalysisData",
+    "ReportORM",
+    "AnalysisORM",
     "SynthesisAnalysis",
     "SynthesisInput", 
     "SynthesisOutput",
@@ -81,6 +82,7 @@ __all__ = [
     "SynthesisJob",
     "User",
     "ApiKey",
+    "Role",
     # Legacy models
     "FacetCount",
     "Facets", 
