@@ -2,7 +2,7 @@ import axios, { type AxiosRequestConfig } from 'axios';
 import type { UserProfile, ApiKey, UserPreferences } from '../types';
 import type { GameSearchResponse, GameConfirmResponse, GameCandidate, ApiReport, ApiReportListResponse } from '../types/game';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 const TOKEN_KEY = 'gs_access_token';
 
 // Callback for navigation to avoid React Router conflicts
