@@ -50,7 +50,7 @@ CREATE TABLE users (
 CREATE TABLE roles (
     -- Claves Primarias
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-user_id UUID NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     role_name VARCHAR(50) NOT NULL CHECK (role_name IN ('admin','developer', 'user')),
     
     -- Claves para filtros y administración
@@ -131,10 +131,15 @@ CREATE TABLE reports (
     primary_genre VARCHAR(100), -- Género principal para filtro rápido
     primary_platform VARCHAR(100), -- Plataforma principal
     developer_name VARCHAR(255), -- Desarrollador para búsqueda
+    cover_url VARCHAR(1000), -- Imagen/cover del juego (proviene del candidato RAWG)
     -- Arrays para filtros múltiples
     all_genres TEXT[], -- Array de todos los géneros
     all_platforms TEXT[], -- Array de todas las plataformas
     tags TEXT[], -- Tags definidos por usuario/sistema
+
+    -- Progreso del pipeline (para la tarjeta "In Pipeline" del dashboard)
+    current_phase VARCHAR(50), -- scraping | analysis | synthesis | storage
+    pipeline_progress INTEGER DEFAULT 0 CHECK (pipeline_progress >= 0 AND pipeline_progress <= 100),
     
     -- Fechas clave para ordenamiento y filtrado temporal
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -196,14 +201,14 @@ CREATE TABLE reports (
 -- =====================================================
 
 -- Índices para usuarios
-CREATE INDEX idx_usuarios_email ON usuarios(email);
-CREATE INDEX idx_usuarios_username ON usuarios(username);
-CREATE INDEX idx_usuarios_active ON usuarios(is_active) WHERE is_active = TRUE;
-CREATE INDEX idx_usuarios_created ON usuarios(created_at DESC);
+CREATE INDEX idx_usuarios_email ON users(email);
+CREATE INDEX idx_usuarios_username ON users(username);
+CREATE INDEX idx_usuarios_active ON users(is_active) WHERE is_active = TRUE;
+CREATE INDEX idx_usuarios_created ON users(created_at DESC);
 
 -- Índices JSONB para usuarios
-CREATE INDEX idx_usuarios_profile ON usuarios USING GIN(profile_jsonb);
-CREATE INDEX idx_usuarios_settings ON usuarios USING GIN(settings_jsonb);
+CREATE INDEX idx_usuarios_profile ON users USING GIN(profile_jsonb);
+CREATE INDEX idx_usuarios_settings ON users USING GIN(settings_jsonb);
 
 -- Índices para roles
 CREATE INDEX idx_roles_user_active ON roles(user_id, is_active);
@@ -281,8 +286,8 @@ END;
 $$ language 'plpgsql';
 
 -- Apply updated_at triggers
-CREATE TRIGGER update_usuarios_updated_at 
-    BEFORE UPDATE ON usuarios 
+CREATE TRIGGER update_usuarios_updated_at
+    BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_analisis_updated_at 
@@ -301,16 +306,16 @@ CREATE TRIGGER update_reportes_updated_at
 -- =====================================================
 
 -- Enable RLS
-ALTER TABLE usuarios ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE analysis ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
 
 -- Políticas para usuarios
-CREATE POLICY "Usuarios pueden ver su propio perfil" ON usuarios
+CREATE POLICY "Usuarios pueden ver su propio perfil" ON users
     FOR SELECT USING (id = current_setting('app.current_user_id', true)::UUID);
 
-CREATE POLICY "Usuarios pueden actualizar su perfil" ON usuarios
+CREATE POLICY "Usuarios pueden actualizar su perfil" ON users
     FOR UPDATE USING (id = current_setting('app.current_user_id', true)::UUID);
 
 -- Políticas para roles
@@ -344,12 +349,12 @@ CREATE POLICY "Usuarios pueden eliminar sus reportes" ON reports
     FOR DELETE USING (user_id = current_setting('app.current_user_id', true)::UUID);
 
 -- Políticas de admin (acceso completo)
-CREATE POLICY "Admins tienen acceso completo a usuarios" ON usuarios
+CREATE POLICY "Admins tienen acceso completo a usuarios" ON users
     FOR ALL USING (
         EXISTS (
-            SELECT 1 FROM roles r 
-            JOIN usuarios u ON r.user_id = u.id 
-            WHERE r.user_id = current_setting('app.current_user_id', true)::UUID 
+            SELECT 1 FROM roles r
+            JOIN users u ON r.user_id = u.id
+            WHERE r.user_id = current_setting('app.current_user_id', true)::UUID
             AND r.role_name = 'admin' AND r.is_active = TRUE
         )
     );
@@ -437,8 +442,8 @@ SELECT
     r.user_metadata_jsonb->>'bookmarked' as bookmarked
     
 FROM reports r
-JOIN usuarios u ON r.user_id = u.id
-WHERE r.user_id = current_setting('app.current_user_id', true)::UUID 
+JOIN users u ON r.user_id = u.id
+WHERE r.user_id = current_setting('app.current_user_id', true)::UUID
    OR EXISTS (
        SELECT 1 FROM roles ro 
        WHERE ro.user_id = current_setting('app.current_user_id', true)::UUID 
@@ -494,17 +499,29 @@ ORDER BY analyst_count DESC, avg_confidence DESC;
 -- =====================================================
 
 -- Usuario inicial
-INSERT INTO usuarios (email, username, profile_jsonb, settings_jsonb) VALUES
-('admin@getsmart.local', 'admin', 
+INSERT INTO users (email, username, profile_jsonb, settings_jsonb) VALUES
+('admin@getsmart.local', 'admin',
  '{"display_name": "System Administrator", "avatar_url": "https://api.dicebear.com/7.x/avataaars/svg?seed=admin"}',
  '{"theme": "dark", "notifications": true, "language": "en"}'
 );
 
+-- Usuario demo: UUID fijo usado por el pipeline como propietario de los reportes generados.
+-- Debe existir para satisfacer reports.user_id NOT NULL cuando no hay sesión real.
+INSERT INTO users (id, email, username, profile_jsonb, settings_jsonb) VALUES
+('00000000-0000-0000-0000-000000000001', 'demo@getsmart.dev', 'demo',
+ '{"display_name": "Demo User", "sso_provider": "demo"}',
+ '{"theme": "dark", "language": "en"}'
+);
+
 -- Asignar rol admin
 INSERT INTO roles (user_id, role_name) VALUES
-((SELECT id FROM usuarios WHERE username = 'admin'), 
+((SELECT id FROM users WHERE username = 'admin'),
  'admin'
 );
+
+-- Asignar rol user al demo
+INSERT INTO roles (user_id, role_name) VALUES
+('00000000-0000-0000-0000-000000000001', 'user');
 
 -- Ejemplo de reporte completo con .md
 INSERT INTO reports (
@@ -517,7 +534,7 @@ INSERT INTO reports (
     report_metadata_jsonb, executive_summary_jsonb
 ) VALUES
 (
-    (SELECT id FROM usuarios WHERE username = 'admin'),
+    (SELECT id FROM users WHERE username = 'admin'),
     uuid_generate_v4(), -- ID único para este juego
     'Elden Ring',
     'elden-ring',

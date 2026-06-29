@@ -143,46 +143,45 @@ class AuthService:
         """Create or update user from SSO provider info"""
         email = user_info.get("email")
         name = user_info.get("name", "")
-        
+
         if not email:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email is required"
             )
-        
-        # Check if user exists
+
+        # Derive a username from the email local part
+        username_base = email.split("@")[0]
+
         user = db.query(User).filter(User.email == email).first()
-        
+
+        default_settings = {
+            "theme": "dark",
+            "language": "en",
+            "notifications_email": True,
+            "notifications_push": False,
+        }
+
         if not user:
-            # Create new user
             user = User(
                 email=email,
-                name=name,
-                sso_provider=provider,
+                username=username_base,
+                profile_jsonb={"display_name": name, "sso_provider": provider},
+                settings_jsonb=default_settings,
                 last_login_at=datetime.utcnow(),
-                preferences={
-                    "theme": "dark",
-                    "language": "en",
-                    "notifications_email": True,
-                    "notifications_push": False
-                }
             )
             db.add(user)
             db.commit()
             db.refresh(user)
         else:
-            # Update existing user
-            user.name = name
-            user.sso_provider = provider
+            profile = dict(user.profile_jsonb or {})
+            profile["display_name"] = name
+            profile["sso_provider"] = provider
+            user.profile_jsonb = profile
             user.last_login_at = datetime.utcnow()
-            if not user.preferences:
-                user.preferences = {
-                    "theme": "dark",
-                    "language": "en", 
-                    "notifications_email": True,
-                    "notifications_push": False
-                }
+            if not user.settings_jsonb:
+                user.settings_jsonb = default_settings
             db.commit()
             db.refresh(user)
-        
+
         return user

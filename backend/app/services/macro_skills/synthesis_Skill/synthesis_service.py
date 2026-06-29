@@ -4,10 +4,10 @@ import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.models.synthesis.synthesis_models import FinalReport, SynthesisInput, SynthesisResponse
-from app.services.macro_skills.synthesis.deterministic_synthesizer import DeterministicSynthesizer
-from app.services.macro_skills.synthesis.format_generators import FormatGenerator
-from app.services.macro_skills.synthesis.gemini_client import GeminiSynthesizer
-from app.services.macro_skills.synthesis.prompt_loader import PromptLoader
+from app.services.macro_skills.synthesis_Skill.deterministic_synthesizer import DeterministicSynthesizer
+from app.services.macro_skills.synthesis_Skill.format_generators import FormatGenerator
+from app.services.macro_skills.synthesis_Skill.gemini_client import GeminiSynthesizer
+from app.services.macro_skills.synthesis_Skill.prompt_loader import PromptLoader
 
 
 class ReportStore:

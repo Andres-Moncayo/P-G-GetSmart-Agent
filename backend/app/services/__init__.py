@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from sqlalchemy import text
+from sqlalchemy import text, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import FacetCount, Facets, Game, Pagination, Report, ReportListResponse
@@ -211,32 +211,27 @@ class ReportService:
         if tags is None and notes is None:
             return await self.get_report(report_id)
 
-        set_parts = ["updated_at = NOW()"]
-        params: Dict[str, Any] = {"report_id": str(report_id)}
+        # Use ORM for the update — asyncpg TEXT[] parameters fail in raw text() queries
+        # due to indeterminate type inference; ORM handles array columns correctly.
+        from app.models.report import Report as ReportORM
+
+        orm_result = await self.db.execute(
+            select(ReportORM).where(ReportORM.id == report_id)
+        )
+        report_orm = orm_result.scalar_one_or_none()
+        if not report_orm:
+            return None
 
         if tags is not None:
-            set_parts.append("tags = :tags")
-            params["tags"] = tags
-
+            report_orm.tags = tags
         if notes is not None:
-            set_parts.append(
-                "user_metadata_jsonb = COALESCE(user_metadata_jsonb, '{}'::jsonb) "
-                "|| jsonb_build_object('user_notes', :notes)"
-            )
-            params["notes"] = notes
+            meta = dict(report_orm.user_metadata_jsonb or {})
+            meta["user_notes"] = notes
+            report_orm.user_metadata_jsonb = meta
 
-        query = text(
-            f"""
-            UPDATE {TABLE_REPORTS}
-            SET {', '.join(set_parts)}
-            WHERE id = :report_id
-            RETURNING *
-            """
-        )
-        result = await self.db.execute(query, params)
         await self.db.commit()
-        item = result.first()
-        return self._row_to_report(item) if item else None
+        await self.db.refresh(report_orm)
+        return self._row_to_report(report_orm)
 
     async def delete_report(self, report_id: UUID) -> bool:
         query = text(
@@ -255,9 +250,14 @@ class ReportService:
 
     def _row_to_report(self, row) -> Report:
         status_value = getattr(row, "report_status", "completed")
-        progress = 100 if status_value == "completed" else (
-            50 if status_value == "processing" else 10 if status_value == "queued" else 0
-        )
+        pipeline_progress = getattr(row, "pipeline_progress", None)
+        if pipeline_progress is None:
+            pipeline_progress = 100 if status_value == "completed" else (
+                50 if status_value == "processing" else 10 if status_value == "queued" else 0
+            )
+
+        all_genres = list(getattr(row, "all_genres", None) or [])
+        all_platforms = list(getattr(row, "all_platforms", None) or [])
 
         game = Game(
             id=str(row.game_id),
@@ -265,42 +265,32 @@ class ReportService:
             slug=getattr(row, "game_slug", None),
             release_year=getattr(row, "release_year", None),
             developer=getattr(row, "developer_name", None),
-            genres=list(row.all_genres or []),
-            platforms=list(row.all_platforms or []),
+            primary_genre=getattr(row, "primary_genre", None),
+            primary_platform=getattr(row, "primary_platform", None),
+            all_genres=all_genres,
+            all_platforms=all_platforms,
+            cover_url=getattr(row, "cover_url", None),
         )
-
-        outputs = {}
-        if getattr(row, "url_markdown", None):
-            outputs["markdown_url"] = row.url_markdown
-        if getattr(row, "url_pdf", None):
-            outputs["pdf_url"] = row.url_pdf
-        if getattr(row, "url_json", None):
-            outputs["json_url"] = row.url_json
-        if getattr(row, "url_json_rag", None):
-            outputs["json_rag_url"] = row.url_json_rag
-
-        metadata: Dict[str, Any] = {}
-        if getattr(row, "completed_at", None):
-            metadata["completed_at"] = row.completed_at.isoformat()
-        if getattr(row, "processing_time_ms", None):
-            metadata["duration_seconds"] = row.processing_time_ms // 1000
-        if getattr(row, "report_metadata_jsonb", None):
-            metadata.update(dict(row.report_metadata_jsonb))
 
         updated_at = getattr(row, "updated_at", None) or row.created_at
 
+        exec_summary  = getattr(row, "executive_summary_jsonb",  None) or None
+        thematic      = getattr(row, "thematic_analysis_jsonb",  None) or None
+        conf_analysis = getattr(row, "confidence_analysis_jsonb", None) or None
+
         return Report(
-            id=row.id,
+            id=str(row.id),
             game=game,
             status=status_value,
-            current_phase=None,
-            progress_percent=progress,
-            outputs=outputs,
-            metadata=metadata,
-            summary=None,
-            tags=list(row.tags or []),
+            current_phase=getattr(row, "current_phase", None),
+            pipeline_progress=pipeline_progress,
+            confidence_score=getattr(row, "confidence_score", None),
+            tags=list(getattr(row, "tags", None) or []),
             created_at=row.created_at,
             updated_at=updated_at,
+            executive_summary=exec_summary,
+            thematic_analysis=thematic,
+            confidence_analysis=conf_analysis,
         )
 
     async def _get_facets(self) -> Facets:

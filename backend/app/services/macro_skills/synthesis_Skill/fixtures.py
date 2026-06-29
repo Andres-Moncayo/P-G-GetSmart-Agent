@@ -212,7 +212,7 @@ def build_demo_synthesis_input() -> SynthesisInput:
             "metadata": {"game_id": GAME_ID, "game_name": GAME_NAME, "pipeline_version": "3.0.0"},
             "evidence_count": 142,
             "confidence_score": 0.82,
-            "hard_data": {"igdb": {}, "rawg": {}, "steam": {}},
+            "hard_data": {"rawg": {}, "steam": {}},
             "semantic_data": {},
         },
         macro_outputs=MacroOutputs(

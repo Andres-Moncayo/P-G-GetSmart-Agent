@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     igdb_client_id: str = ""
     igdb_client_secret: str = ""
     rawg_api_key: str = ""
+
+    # Scraper API keys (Phase 1)
+    steam_api_key: str = ""
     tavily_api_key: str = ""
 
     # Frontend
@@ -54,3 +57,11 @@ settings = Settings()
 GEMINI_API_KEY = settings.gemini_api_key
 SECRET_KEY = settings.jwt_secret
 ALGORITHM = settings.jwt_algorithm
+
+PIPELINE_VERSION = "3.0.0"
+SYNTHESIS_MODEL = "gemini-1.5-flash"
+
+from pathlib import Path
+BASE_DIR = Path(__file__).resolve().parents[1]
+TEMPLATES_DIR = BASE_DIR / "templates"
+OPENSPEC_SYNTHESIS_YAML = Path(__file__).resolve().parents[2] / "openspec" / "config.yaml"

@@ -1,12 +1,59 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { REPORTS, REPORT_PREVIEWS, GENRE_FILTERS, DEV_FILTERS, PLATFORM_FILTERS, DATE_FILTERS, REPORT_DATES } from '../data/gameData';
-import type { Report, ReportPreview, GameCandidate } from '../types/game';
+import { DATE_FILTERS } from '../data/gameData';
+import type { Report, GameCandidate, ApiReport, ApiReportListResponse, MacroSkillStructured } from '../types/game';
 import { apiClient } from '../services/api';
 
 function fmtDate(iso: string | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// ─── API → Legacy adapter ─────────────────────────────────────────────────────
+
+const PLATFORM_ICON: Record<string, string> = {
+  'PC': 'fab fa-windows',
+  'PlayStation 4': 'fab fa-playstation',
+  'PlayStation 5': 'fab fa-playstation',
+  'PlayStation 3': 'fab fa-playstation',
+  'Xbox One': 'fab fa-xbox',
+  'Xbox Series X': 'fab fa-xbox',
+  'Xbox Series S': 'fab fa-xbox',
+  'Xbox 360': 'fab fa-xbox',
+  'Nintendo Switch': 'fas fa-gamepad',
+  'macOS': 'fab fa-apple',
+  'iOS': 'fab fa-apple',
+  'Android': 'fab fa-android',
+};
+
+const PHASE_NUM: Record<string, number> = {
+  ingestion: 1, consolidation: 2, analysis: 3, synthesis: 4,
+};
+
+function apiReportToLegacy(r: ApiReport): Report {
+  const platforms = (r.game.all_platforms ?? []).map(p => PLATFORM_ICON[p] ?? 'fas fa-gamepad');
+  const phaseNum = r.current_phase ? (PHASE_NUM[r.current_phase.toLowerCase()] ?? 1) : 1;
+  const isActive = r.status === 'processing' || r.status === 'pending';
+  return {
+    id: r.id,
+    title: r.game.name,
+    developer: r.game.developer ?? 'Unknown',
+    year: r.game.release_year ?? 0,
+    genre: r.game.primary_genre ?? 'Unknown',
+    status: isActive ? 'processing' : r.status === 'failed' ? 'failed' : 'completed',
+    platforms: [...new Set(platforms)],
+    platformNames: r.game.all_platforms ?? [],
+    time: isActive ? `Phase ${phaseNum}/4` : '',
+    createdAt: r.created_at,
+    image: r.game.cover_url ?? `https://picsum.photos/seed/${r.id}/400/225`,
+    progress: r.pipeline_progress,
+    confidenceScore: r.confidence_score,
+    tags: r.tags ?? [],
+    allGenres: r.game.all_genres ?? [],
+    macroSkillScores: (r.thematic_analysis?.skill_scores as Record<string, number | null>) ?? {},
+    executiveSummaryData: r.executive_summary ?? {},
+    structuredSkills: (r.thematic_analysis?.structured_skills as MacroSkillStructured[] | undefined) ?? [],
+  };
 }
 
 // ─── FilterCheckbox ───────────────────────────────────────────────────────────
@@ -79,7 +126,7 @@ function InPhaseCard({ report, onClick }: InPhaseCardProps) {
             <p className="text-xs text-muted truncate">{report.developer}</p>
             <p className="text-xs text-disabled flex items-center gap-1 mt-0.5">
               <i className="fas fa-calendar-alt text-[9px]" />
-              {fmtDate(REPORT_DATES[report.id])}
+              {fmtDate(report.createdAt)}
             </p>
           </div>
           <span className="flex-shrink-0 text-xs font-semibold text-warning bg-warning/10 border border-warning/20 px-2 py-0.5 rounded-full">
@@ -120,7 +167,7 @@ function InPhaseCard({ report, onClick }: InPhaseCardProps) {
 
 // ─── InPhaseSection ───────────────────────────────────────────────────────────
 
-interface InPhaseSectionProps { reports: Report[]; onClickReport: (id: number) => void; }
+interface InPhaseSectionProps { reports: Report[]; onClickReport: (id: string) => void; }
 function InPhaseSection({ reports, onClickReport }: InPhaseSectionProps) {
   if (reports.length === 0) return null;
   return (
@@ -172,12 +219,400 @@ function ReportCard({ report, onClick }: ReportCardProps) {
         <p className="text-xs text-muted">{report.developer} · {report.year}</p>
         <p className="text-xs text-disabled flex items-center gap-1 mt-0.5">
           <i className="fas fa-calendar-alt text-[9px]" />
-          {fmtDate(REPORT_DATES[report.id])}
+          {fmtDate(report.createdAt)}
         </p>
         <div className="flex gap-1.5 mt-auto pt-2">
           {report.platforms.slice(0, 4).map((icon) => (
             <i key={icon} className={`${icon} text-xs text-disabled`} />
           ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ReportPreviewModal ───────────────────────────────────────────────────────
+
+const SKILL_CONFIG = [
+  { key: 'Design & Art',         icon: 'fa-palette',    color: 'from-purple-500/15 to-violet-600/10', textColor: 'text-purple-400' },
+  { key: 'User Experience',      icon: 'fa-user-circle',color: 'from-sky-500/15 to-cyan-600/10',      textColor: 'text-sky-400'    },
+  { key: 'Technology Systems',   icon: 'fa-microchip',  color: 'from-emerald-500/15 to-green-600/10', textColor: 'text-emerald-400'},
+  { key: 'Strategy Market',      icon: 'fa-chart-line', color: 'from-amber-500/15 to-orange-600/10',  textColor: 'text-amber-400'  },
+];
+
+// Normalize the loose skill keys coming from the orchestrator enrichment
+function resolveSkillScore(scores: Record<string, number | null>, configKey: string): number | null {
+  const variants: string[] = [
+    configKey,
+    configKey.toLowerCase(),
+    configKey.toLowerCase().replace(/\s+/g, '_'),
+    configKey.toLowerCase().replace(/\s+/g, '-'),
+    configKey.replace(/ /g, ''),
+  ];
+  for (const v of variants) {
+    if (scores[v] != null) return scores[v];
+  }
+  // partial match
+  const lower = configKey.toLowerCase();
+  for (const [k, v] of Object.entries(scores)) {
+    if (k.toLowerCase().includes(lower.split(' ')[0])) return v;
+  }
+  return null;
+}
+
+interface ReportPreviewModalProps {
+  report: Report;
+  onClose: () => void;
+}
+
+function ReportPreviewModal({ report, onClose }: ReportPreviewModalProps) {
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [onClose]);
+
+  const rawScore     = report.confidenceScore;
+  const overallScore = rawScore != null ? rawScore * 10 : null;
+  const tag          = (report.tags ?? [])[0] ?? (report.status === 'completed' ? 'Completed' : '—');
+  const scores       = report.macroSkillScores ?? {};
+  const scoreColor   = overallScore == null ? 'text-muted' : overallScore >= 9 ? 'text-success' : overallScore >= 7.5 ? 'text-warning' : 'text-error';
+
+  // Index structured skills by label for quick lookup
+  const structuredByLabel = Object.fromEntries(
+    (report.structuredSkills ?? []).map(s => [s.skill_label, s])
+  );
+
+  const market: Record<string, string> = {
+    Genre:      report.genre,
+    Platforms:  report.platformNames.length ? String(report.platformNames.length) : '—',
+    Year:       report.year ? String(report.year) : '—',
+    Status:     report.status === 'completed' ? 'Done' : report.status,
+  };
+
+  return (
+    <div
+      ref={overlayRef}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+      onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
+    >
+      <div className="bg-surface border border-border rounded-2xl w-full max-w-2xl shadow-modal max-h-[90vh] overflow-y-auto scrollbar-hide">
+
+        {/* ── Cover header ── */}
+        <div className="relative h-44 bg-elevated overflow-hidden rounded-t-2xl">
+          <img
+            src={report.image}
+            alt={report.title}
+            className="w-full h-full object-cover"
+            onError={e => { (e.target as HTMLImageElement).src = `https://picsum.photos/seed/${report.id}/600/300`; }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/30 to-transparent" />
+          <button
+            onClick={onClose}
+            className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/60 flex items-center justify-center text-white hover:bg-black/80 transition-colors"
+          >
+            <i className="fas fa-times text-xs" />
+          </button>
+          <div className="absolute bottom-4 left-5 right-5">
+            <div className="flex items-end gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-accent font-medium uppercase tracking-wider mb-0.5">{report.genre}</p>
+                <h2 className="text-xl font-bold text-primary leading-tight truncate">{report.title}</h2>
+                <p className="text-xs text-muted">{report.developer} · {report.year || '—'}</p>
+              </div>
+              {overallScore != null && (
+                <div className="text-right flex-shrink-0">
+                  <p className={`text-3xl font-black ${scoreColor}`}>{overallScore.toFixed(1)}</p>
+                  <p className="text-xs text-muted truncate max-w-[100px]">{tag}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Body ── */}
+        <div className="p-5 space-y-5">
+
+          {/* Macro-Skill Analysis */}
+          <div>
+            <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Macro-Skill Analysis</p>
+            <div className="grid grid-cols-2 gap-3">
+              {SKILL_CONFIG.map((skill) => {
+                const structured = structuredByLabel[skill.key];
+                const scoreRaw = structured?.confidence_raw ?? resolveSkillScore(scores, skill.key);
+                const scoreDisplay = structured?.score ?? (scoreRaw != null ? scoreRaw * 10 : null);
+                const barWidth = scoreRaw != null ? scoreRaw * 100 : (scoreDisplay != null ? scoreDisplay * 10 : null);
+                const summary = structured?.summary ?? '';
+                const strengths = structured?.strengths ?? [];
+                const weaknesses = structured?.weaknesses ?? [];
+                const hasDetail = summary || strengths.length > 0 || weaknesses.length > 0;
+
+                return (
+                  <div key={skill.key} className={`rounded-xl p-3 bg-gradient-to-br ${skill.color} border border-border flex flex-col gap-2`}>
+                    {/* Header row */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <i className={`fas ${skill.icon} text-xs ${skill.textColor} flex-shrink-0`} />
+                        <p className="text-xs font-semibold text-primary truncate">{skill.key}</p>
+                      </div>
+                      <span className={`text-sm font-black ${skill.textColor} flex-shrink-0 ml-1`}>
+                        {scoreDisplay != null ? scoreDisplay.toFixed(1) : '—'}
+                      </span>
+                    </div>
+
+                    {/* Score bar */}
+                    {barWidth != null ? (
+                      <div className="h-1 bg-black/20 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${skill.textColor.replace('text-', 'bg-')}`} style={{ width: `${barWidth}%` }} />
+                      </div>
+                    ) : null}
+
+                    {/* LLM-generated detail */}
+                    {hasDetail ? (
+                      <div className="space-y-1.5 mt-0.5">
+                        {summary && (
+                          <p className="text-[10px] text-muted leading-snug line-clamp-2">{summary}</p>
+                        )}
+                        {strengths.slice(0, 2).map((s, i) => (
+                          <p key={i} className="text-[10px] text-success/80 flex gap-1 leading-snug">
+                            <span className="flex-shrink-0">+</span><span className="line-clamp-1">{s}</span>
+                          </p>
+                        ))}
+                        {weaknesses.slice(0, 1).map((w, i) => (
+                          <p key={i} className="text-[10px] text-gray-200 text-error/70 flex gap-1 leading-snug">
+                            <span className="flex-shrink-0">−</span><span className="line-clamp-1">{w}</span>
+                          </p>
+                        ))}
+                      </div>
+                    ) : (
+                      !barWidth && <p className="text-[10px] text-muted/60 italic">No data yet</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Tags */}
+          {(report.tags ?? []).length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">Tags</p>
+              <div className="flex flex-wrap gap-1.5">
+                {(report.tags ?? []).map(t => (
+                  <span key={t} className="text-xs px-2.5 py-1 rounded-full bg-accent/10 text-accent border border-accent/20">{t}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Market Intelligence */}
+          <div>
+            <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Market Intelligence</p>
+            <div className="grid grid-cols-4 gap-2">
+              {Object.entries(market).map(([key, val]) => (
+                <div key={key} className="bg-elevated rounded-xl p-3 text-center">
+                  <p className="text-sm font-bold text-primary leading-tight truncate">{val}</p>
+                  <p className="text-xs text-muted mt-0.5">{key}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2 pt-1 border-t border-border">
+            <button className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-accent text-white text-xs font-semibold hover:bg-accent-dark transition-colors">
+              <i className="fas fa-file-alt" /> Full Report
+            </button>
+            <button className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-elevated text-primary-muted text-xs font-semibold hover:text-primary transition-colors border border-border">
+              <i className="fas fa-download" /> Export
+            </button>
+            <button
+              onClick={onClose}
+              className="flex items-center justify-center gap-1.5 py-2 px-4 rounded-lg bg-elevated text-muted text-xs hover:text-primary transition-colors border border-border"
+            >
+              Close
+            </button>
+          </div>
+
+          {/* Date */}
+          <p className="text-xs text-disabled flex items-center gap-1.5 -mt-2">
+            <i className="fas fa-calendar-alt text-[9px]" />
+            Generated {fmtDate(report.createdAt)}
+          </p>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+// ─── PipelineModal ───────────────────────────────────────────────────────────
+
+const PIPELINE_PHASES = [
+  { key: 'scraping',  label: 'Scraping'   },
+  { key: 'analysis',  label: 'Analysis'   },
+  { key: 'synthesis', label: 'Synthesis'  },
+  { key: 'storage',   label: 'Storage'    },
+];
+
+interface PipelineModalProps {
+  reportId: string;
+  gameName: string;
+  onClose: () => void;
+  onComplete: () => void;
+}
+
+function PipelineModal({ reportId, gameName, onClose, onComplete }: PipelineModalProps) {
+  const [pipelineData, setPipelineData] = useState<any>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const doneRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function poll() {
+      while (!cancelled) {
+        try {
+          const data = await apiClient.getPipelineStatus(reportId);
+          if (cancelled) return;
+          setPipelineData(data);
+          if (data.is_complete && !doneRef.current) {
+            doneRef.current = true;
+            onComplete();
+            return;
+          }
+          if (data.status === 'failed' && !doneRef.current) {
+            setErrorMsg(data.message || 'Pipeline failed');
+            return;
+          }
+        } catch {
+          // keep retrying silently
+        }
+        if (!cancelled) await new Promise<void>(r => setTimeout(r, 3000));
+      }
+    }
+
+    poll();
+    return () => { cancelled = true; };
+  }, [reportId, onComplete]);
+
+  const overall   = pipelineData?.overall_progress ?? 0;
+  const phases    = pipelineData?.phases ?? {};
+  const currentMsg = pipelineData?.message ?? 'Starting pipeline…';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+      <div className="bg-surface border border-border rounded-2xl w-full max-w-md mx-4 shadow-modal">
+        {/* Header */}
+        <div className="p-5 border-b border-border flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs text-warning font-medium uppercase tracking-wider mb-1 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-warning dot-pulse inline-block" />
+              Pipeline Running
+            </p>
+            <h3 className="text-base font-bold text-primary truncate">{gameName}</h3>
+            <p className="text-xs text-muted mt-0.5 truncate">{currentMsg}</p>
+          </div>
+          <button
+            onClick={onClose}
+            title="Minimize — pipeline continues in background"
+            className="text-muted hover:text-primary flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-elevated transition-colors"
+          >
+            <i className="fas fa-minus text-xs" />
+          </button>
+        </div>
+
+        {/* Overall progress bar */}
+        <div className="px-5 pt-4">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs text-muted">Overall Progress</span>
+            <span className="text-xs font-semibold text-primary">{overall}%</span>
+          </div>
+          <div className="h-2 bg-elevated rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-warning to-amber-300 rounded-full transition-all duration-700"
+              style={{ width: `${overall}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Phase list */}
+        <div className="p-5 space-y-4">
+          {PIPELINE_PHASES.map(({ key, label }, idx) => {
+            const ph = phases[key] ?? {};
+            const st = ph.status ?? 'waiting';
+            const pr = ph.progress ?? 0;
+            const isRunning  = st === 'running';
+            const isDonePhase = st === 'completed';
+            const isFailed   = st === 'failed';
+            const isSkipped  = st === 'skipped';
+
+            return (
+              <div key={key} className="flex items-center gap-3">
+                {/* Status icon */}
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-xs ${
+                  isDonePhase ? 'bg-success/15 text-success' :
+                  isFailed    ? 'bg-error/15 text-error'    :
+                  isSkipped   ? 'bg-elevated text-muted'    :
+                  isRunning   ? 'bg-warning/15 text-warning' :
+                                'bg-elevated text-disabled'
+                }`}>
+                  {isDonePhase ? <i className="fas fa-check" /> :
+                   isFailed    ? <i className="fas fa-times" /> :
+                   isSkipped   ? <i className="fas fa-forward text-[10px]" /> :
+                   isRunning   ? <div className="w-3.5 h-3.5 border-2 border-warning/30 border-t-warning rounded-full animate-spin" /> :
+                                 <span className="font-bold text-[10px]">{idx + 1}</span>}
+                </div>
+
+                {/* Label + progress */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={`text-xs font-medium ${
+                      isDonePhase ? 'text-success' :
+                      isFailed    ? 'text-error'   :
+                      isRunning   ? 'text-warning'  :
+                                    'text-disabled'
+                    }`}>{label}</span>
+                    <span className="text-xs text-muted">
+                      {isDonePhase ? 'Done'   :
+                       isFailed    ? 'Failed' :
+                       isSkipped   ? 'Skipped':
+                       isRunning   ? `${pr}%` : ''}
+                    </span>
+                  </div>
+                  {isRunning && (
+                    <div className="h-1 bg-elevated rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-warning rounded-full transition-all duration-500"
+                        style={{ width: `${pr}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 pb-5">
+          {errorMsg ? (
+            <>
+              <div className="bg-error/10 border border-error/20 rounded-lg p-3 mb-3">
+                <p className="text-xs text-error">{errorMsg}</p>
+              </div>
+              <button onClick={onClose} className="w-full py-2 rounded-lg border border-border text-sm text-muted hover:text-primary transition-colors">
+                Close
+              </button>
+            </>
+          ) : (
+            <p className="text-xs text-disabled text-center">
+              <i className="fas fa-info-circle mr-1 text-muted" />
+              You can minimize this — the pipeline continues in the background
+            </p>
+          )}
         </div>
       </div>
     </div>
@@ -253,8 +688,8 @@ function DisambiguationModal({ query, candidates, onClose, onConfirm }: Disambig
                   {[c.developer, c.release_year, c.genres[0]].filter(Boolean).join(' · ')}
                 </p>
                 <div className="flex items-center gap-2 mt-1">
-                  {c.igdb_id && (
-                    <span className="text-[10px] text-disabled bg-elevated px-1.5 py-0.5 rounded font-mono">igdb: {c.igdb_id}</span>
+                  {c.rawg_id && (
+                    <span className="text-[10px] text-disabled bg-elevated px-1.5 py-0.5 rounded font-mono">rawg: {c.rawg_id}</span>
                   )}
                   {c.platforms.length > 0 && (
                     <span className="text-[10px] text-disabled truncate">{c.platforms.slice(0, 2).join(', ')}</span>
@@ -301,184 +736,8 @@ function DisambiguationModal({ query, candidates, onClose, onConfirm }: Disambig
   );
 }
 
-// ─── PipelineModal ────────────────────────────────────────────────────────────
-
-type PhaseState = 'idle' | 'running' | 'done';
-const PHASES = ['Ingestion', 'Consolidation', 'Analysis', 'Synthesis', 'Packaging'];
-const SKILLS = ['Design & Art', 'User Experience', 'Technology & Systems', 'Strategy & Market'];
-
-interface PipelineModalProps { gameTitle: string; onClose: () => void; onComplete: () => void; }
-function PipelineModal({ gameTitle, onClose, onComplete }: PipelineModalProps) {
-  const [phases, setPhases]   = useState<PhaseState[]>(['running', 'idle', 'idle', 'idle', 'idle']);
-  const [progress, setProgress] = useState(10);
-  const [done, setDone]       = useState(false);
-  const [skills, setSkills]   = useState<PhaseState[]>(['idle', 'idle', 'idle', 'idle']);
-
-  useEffect(() => {
-    const t0 = setTimeout(() => { setPhases(['done', 'running', 'idle', 'idle', 'idle']); setProgress(25); }, 900);
-    const t1 = setTimeout(() => { setPhases(['done', 'done', 'running', 'idle', 'idle']); setProgress(45); }, 1800);
-    const t2 = setTimeout(() => { setSkills(['running', 'running', 'running', 'running']); }, 2200);
-    const t3 = setTimeout(() => { setPhases(['done', 'done', 'done', 'running', 'idle']); setProgress(75); setSkills(['done', 'done', 'done', 'done']); }, 3400);
-    const t4 = setTimeout(() => { setPhases(['done', 'done', 'done', 'done', 'running']); setProgress(90); }, 4400);
-    const t5 = setTimeout(() => { setPhases(['done', 'done', 'done', 'done', 'done']); setProgress(100); setDone(true); }, 5200);
-    const t6 = setTimeout(() => { onComplete(); onClose(); }, 6400);
-    return () => { [t0, t1, t2, t3, t4, t5, t6].forEach(clearTimeout); };
-  }, []);
-
-  const phaseIcon = (s: PhaseState) =>
-    s === 'done'    ? <i className="fas fa-check text-success text-xs" /> :
-    s === 'running' ? <div className="w-3 h-3 border-2 border-accent border-t-transparent rounded-full animate-spin" /> :
-                      <span className="w-2 h-2 rounded-full bg-border block" />;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="bg-surface border border-border rounded-2xl w-full max-w-sm mx-4 shadow-modal overflow-hidden">
-        <div className="p-5 border-b border-border">
-          <p className="text-xs text-accent font-medium uppercase tracking-wider mb-1">GetSmart Pipeline</p>
-          <h3 className="text-base font-bold text-primary truncate">{gameTitle}</h3>
-        </div>
-        <div className="p-5 space-y-3">
-          <div className="h-1.5 bg-elevated rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-accent to-secondary rounded-full progress-glow transition-all duration-700" style={{ width: `${progress}%` }} />
-          </div>
-          <div className="space-y-2">
-            {PHASES.map((name, i) => (
-              <div key={name} className="flex items-center gap-3">
-                <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">{phaseIcon(phases[i])}</div>
-                <span className={`text-sm ${phases[i] === 'done' ? 'text-primary' : phases[i] === 'running' ? 'text-accent' : 'text-disabled'}`}>{name}</span>
-                {name === 'Analysis' && phases[i] === 'running' && (
-                  <div className="ml-auto flex gap-1">
-                    {skills.map((s, j) => (
-                      <div key={j} title={SKILLS[j]} className={`w-1.5 h-1.5 rounded-full transition-colors ${s === 'done' ? 'bg-success' : s === 'running' ? 'bg-accent animate-pulse' : 'bg-border'}`} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-          {(phases[2] === 'running' || phases[2] === 'done') && (
-            <div className="pt-2 border-t border-border grid grid-cols-2 gap-1.5">
-              {SKILLS.map((name, i) => (
-                <div key={name} className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg transition-all ${skills[i] === 'done' ? 'bg-success/10 text-success' : skills[i] === 'running' ? 'bg-accent/10 text-accent' : 'bg-elevated text-disabled'}`}>
-                  <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${skills[i] === 'done' ? 'bg-success' : skills[i] === 'running' ? 'bg-accent animate-pulse' : 'bg-disabled'}`} />
-                  <span className="truncate">{name}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {done && <p className="text-center text-sm font-semibold text-success pt-2">Report ready! Opening preview...</p>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── ReportPreviewModal ───────────────────────────────────────────────────────
-
-interface ReportPreviewModalProps { report: Report; preview: ReportPreview; onClose: () => void; }
-function ReportPreviewModal({ report, preview, onClose }: ReportPreviewModalProps) {
-  const overlayRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [onClose]);
-
-  const scoreColor = preview.overallScore >= 9 ? 'text-success' : preview.overallScore >= 7.5 ? 'text-warning' : 'text-danger';
-
-  return (
-    <div ref={overlayRef} className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
-      onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}>
-      <div className="bg-surface border border-border rounded-2xl w-full max-w-2xl shadow-modal max-h-[90vh] overflow-y-auto scrollbar-hide">
-        <div className="relative h-44 bg-elevated overflow-hidden rounded-t-2xl">
-          <img src={report.image} alt={report.title} className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/30 to-transparent" />
-          <button onClick={onClose} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/60 flex items-center justify-center text-white hover:bg-black/80 transition-colors">
-            <i className="fas fa-times text-xs" />
-          </button>
-          <div className="absolute bottom-4 left-5 right-16">
-            <div className="flex items-end gap-3">
-              <div className="flex-1">
-                <p className="text-xs text-accent font-medium uppercase tracking-wider mb-0.5">{report.genre}</p>
-                <h2 className="text-xl font-bold text-primary leading-tight">{report.title}</h2>
-                <p className="text-xs text-muted">{report.developer} · {report.year}</p>
-              </div>
-              <div className="text-right">
-                <p className={`text-3xl font-black ${scoreColor}`}>{preview.overallScore.toFixed(1)}</p>
-                <p className="text-xs text-muted">{preview.tag}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="p-5 space-y-5">
-          <p className="text-sm text-primary-muted leading-relaxed">{preview.summary}</p>
-          <div>
-            <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Macro-Skill Analysis</p>
-            <div className="grid grid-cols-2 gap-3">
-              {preview.macroSkills.map((skill) => (
-                <div key={skill.name} className={`rounded-xl p-3 bg-gradient-to-br ${skill.color} border border-border`}>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <i className={`fas ${skill.icon} text-xs ${skill.textColor}`} />
-                      <p className="text-xs font-semibold text-primary">{skill.name}</p>
-                    </div>
-                    <span className={`text-sm font-black ${skill.textColor}`}>{skill.score.toFixed(1)}</span>
-                  </div>
-                  <p className="text-xs text-muted leading-snug mb-2 line-clamp-2">{skill.summary}</p>
-                  <div className="space-y-1">
-                    {skill.strengths.slice(0, 2).map((s) => (
-                      <div key={s} className="flex items-start gap-1.5 text-xs text-primary-muted">
-                        <i className="fas fa-plus text-success mt-0.5 flex-shrink-0 text-[9px]" />{s}
-                      </div>
-                    ))}
-                    {skill.weaknesses.slice(0, 1).map((w) => (
-                      <div key={w} className="flex items-start gap-1.5 text-xs text-primary-muted">
-                        <i className="fas fa-minus text-danger mt-0.5 flex-shrink-0 text-[9px]" />{w}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Market Intelligence</p>
-            <div className="grid grid-cols-4 gap-2">
-              {Object.entries(preview.market).map(([key, val]) => (
-                <div key={key} className="bg-elevated rounded-xl p-3 text-center">
-                  <p className="text-sm font-bold text-primary leading-tight">{val}</p>
-                  <p className="text-xs text-muted mt-0.5">{key}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="flex gap-2 pt-1 border-t border-border">
-            <button className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-accent text-white text-xs font-semibold hover:bg-accent-dark transition-colors">
-              <i className="fas fa-file-pdf" /> PDF
-            </button>
-            <button className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-elevated text-primary-muted text-xs font-semibold hover:bg-bg-hover hover:text-primary transition-colors border border-border">
-              <i className="fas fa-code" /> JSON
-            </button>
-            <button className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-elevated text-primary-muted text-xs font-semibold hover:bg-bg-hover hover:text-primary transition-colors border border-border">
-              <i className="fas fa-share-alt" /> Share
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Dashboard ────────────────────────────────────────────────────────────────
 
 type SortKey = 'recent' | 'alpha' | 'year';
-
-const platformIcon: Record<string, string> = {
-  'PC': 'fab fa-windows',
-  'PlayStation': 'fab fa-playstation',
-  'Xbox': 'fab fa-xbox',
-  'Switch': 'fas fa-gamepad',
-};
 
 export function Dashboard() {
   const [search, setSearch]               = useState('');
@@ -488,29 +747,46 @@ export function Dashboard() {
   const [platformFilters, setPlatFilters] = useState<string[]>([]);
   const [dateFilter, setDateFilter]       = useState<number | null>(null);
 
-  const [showDisamb, setShowDisamb]         = useState(false);
-  const [showPipeline, setShowPipeline]     = useState(false);
-  const [showPreview, setShowPreview]       = useState<number | null>(null);
-  const [inputQuery, setInputQuery]         = useState('');
-  const [pipelineTitle, setPipelineTitle]   = useState('');
+  const [showDisamb, setShowDisamb]           = useState(false);
+  const [inputQuery, setInputQuery]           = useState('');
+  const [pipelineTitle, setPipelineTitle]     = useState('');
   const [disambCandidates, setDisambCandidates] = useState<GameCandidate[]>([]);
-  const [isGenerating, setIsGenerating]     = useState(false);
+  const [reports, setReports]                 = useState<Report[]>([]);
+  const [facets, setFacets]                   = useState<ApiReportListResponse['facets'] | null>(null);
+  const [isLoadingReports, setIsLoadingReports] = useState(false);
+  const [isGenerating, setIsGenerating]       = useState(false);
+  const [showPipeline, setShowPipeline]         = useState(false);
+  const [pipelineReportId, setPipelineReportId] = useState<string | null>(null);
+  const [previewReport, setPreviewReport]       = useState<Report | null>(null);
+
+  async function loadReports() {
+    setIsLoadingReports(true);
+    try {
+      const data = await apiClient.getReports({ page: 1, page_size: 200 });
+      setReports(data.items.map(apiReportToLegacy));
+      setFacets(data.facets);
+    } catch (error) {
+      console.error('Failed to load reports:', error);
+    } finally {
+      setIsLoadingReports(false);
+    }
+  }
+
+  useEffect(() => { loadReports(); }, []);
 
   function toggle<T>(arr: T[], val: T): T[] {
     return arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val];
   }
 
-  // In-pipeline games — shown in dedicated section, also search-filtered
   const inPhaseReports = useMemo(() => {
-    const processing = REPORTS.filter((r) => r.status === 'processing');
+    const processing = reports.filter((r) => r.status === 'processing');
     if (!search.trim()) return processing;
     const q = search.toLowerCase();
     return processing.filter((r) => r.title.toLowerCase().includes(q) || r.developer.toLowerCase().includes(q));
-  }, [search]);
+  }, [search, reports]);
 
-  // Completed games — main grid
   const filteredReports = useMemo(() => {
-    let list = REPORTS.filter((r) => r.status !== 'processing');
+    let list = reports.filter((r) => r.status !== 'processing');
 
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -520,30 +796,21 @@ export function Dashboard() {
     if (devFilters.length)      list = list.filter((r) => devFilters.includes(r.developer));
     if (platformFilters.length) {
       list = list.filter((r) =>
-        platformFilters.some((pf) => {
-          const icon = platformIcon[pf];
-          return icon && r.platforms.includes(icon);
-        })
+        platformFilters.some((pf) => r.platformNames.some((n) => n === pf))
       );
     }
     if (dateFilter !== null) {
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - dateFilter);
-      list = list.filter((r) => {
-        const d = REPORT_DATES[r.id];
-        return d && new Date(d) >= cutoff;
-      });
+      list = list.filter((r) => r.createdAt && new Date(r.createdAt) >= cutoff);
     }
 
-    if (sortKey === 'alpha')  list = [...list].sort((a, b) => a.title.localeCompare(b.title));
-    else if (sortKey === 'year') list = [...list].sort((a, b) => b.year - a.year);
-    else list = [...list].sort((a, b) => {
-      const da = REPORT_DATES[a.id] ?? ''; const db = REPORT_DATES[b.id] ?? '';
-      return db.localeCompare(da);
-    });
+    if (sortKey === 'alpha')       list = [...list].sort((a, b) => a.title.localeCompare(b.title));
+    else if (sortKey === 'year')   list = [...list].sort((a, b) => b.year - a.year);
+    else list = [...list].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
 
     return list;
-  }, [search, genreFilters, devFilters, platformFilters, dateFilter, sortKey]);
+  }, [search, genreFilters, devFilters, platformFilters, dateFilter, sortKey, reports]);
 
   const hasFilters = genreFilters.length + devFilters.length + platformFilters.length > 0 || dateFilter !== null;
 
@@ -568,16 +835,28 @@ export function Dashboard() {
     }
   }
 
-  function handleDisambiguationConfirm(game: GameCandidate) {
+  async function handleDisambiguationConfirm(game: GameCandidate) {
     setShowDisamb(false);
-    setPipelineTitle(game.name);
-    setShowPipeline(true);
+    setIsGenerating(true);
+    try {
+      const response = await apiClient.startPipeline(game.id);
+      setPipelineReportId(response.report_id);
+      setShowPipeline(true);
+    } catch (error) {
+      console.error('Failed to start pipeline:', error);
+      alert('Error starting pipeline. Please try again.');
+    } finally {
+      setIsGenerating(false);
+    }
   }
 
-  const previewReport = showPreview !== null ? REPORTS.find((r) => r.id === showPreview) : null;
-  const previewData   = showPreview !== null ? REPORT_PREVIEWS[showPreview] : null;
+  function handlePipelineComplete() {
+    setShowPipeline(false);
+    setPipelineReportId(null);
+    loadReports();
+  }
 
-  const totalCompleted = REPORTS.filter((r) => r.status !== 'processing').length;
+  const totalCompleted = reports.filter((r) => r.status !== 'processing').length;
 
   return (
     <div className="flex flex-col h-full">
@@ -632,28 +911,28 @@ export function Dashboard() {
 
           <div>
             <p className="text-xs font-semibold text-primary mb-2">Genre</p>
-            {GENRE_FILTERS.map((f) => (
-              <FilterCheckbox key={f.label} label={f.label} count={f.count}
-                checked={genreFilters.includes(f.label)}
-                onChange={() => setGenreFilters(toggle(genreFilters, f.label))} />
+            {(facets?.genre ?? []).map((f) => (
+              <FilterCheckbox key={f.value} label={f.value} count={f.count}
+                checked={genreFilters.includes(f.value)}
+                onChange={() => setGenreFilters(toggle(genreFilters, f.value))} />
             ))}
           </div>
 
           <div>
             <p className="text-xs font-semibold text-primary mb-2">Developer</p>
-            {DEV_FILTERS.map((f) => (
-              <FilterCheckbox key={f.label} label={f.label} count={f.count}
-                checked={devFilters.includes(f.label)}
-                onChange={() => setDevFilters(toggle(devFilters, f.label))} />
+            {(facets?.developer ?? []).map((f) => (
+              <FilterCheckbox key={f.value} label={f.value} count={f.count}
+                checked={devFilters.includes(f.value)}
+                onChange={() => setDevFilters(toggle(devFilters, f.value))} />
             ))}
           </div>
 
           <div>
             <p className="text-xs font-semibold text-primary mb-2">Platform</p>
-            {PLATFORM_FILTERS.map((f) => (
-              <FilterCheckbox key={f.label} label={f.label} count={f.count}
-                checked={platformFilters.includes(f.label)}
-                onChange={() => setPlatFilters(toggle(platformFilters, f.label))} />
+            {(facets?.platform ?? []).map((f) => (
+              <FilterCheckbox key={f.value} label={f.value} count={f.count}
+                checked={platformFilters.includes(f.value)}
+                onChange={() => setPlatFilters(toggle(platformFilters, f.value))} />
             ))}
           </div>
 
@@ -670,7 +949,7 @@ export function Dashboard() {
         {/* Grid */}
         <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 flex flex-col min-h-0">
           {/* In Pipeline section */}
-          <InPhaseSection reports={inPhaseReports} onClickReport={(id) => setShowPreview(id)} />
+          <InPhaseSection reports={inPhaseReports} onClickReport={() => {}} />
 
           {/* Completed header */}
           <div className="flex items-center justify-between mb-4 flex-shrink-0">
@@ -683,7 +962,12 @@ export function Dashboard() {
             </p>
           </div>
 
-          {filteredReports.length === 0 ? (
+          {isLoadingReports ? (
+            <div className="flex flex-col items-center justify-center flex-1 gap-3">
+              <div className="w-6 h-6 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
+              <p className="text-muted text-sm">Loading reports…</p>
+            </div>
+          ) : filteredReports.length === 0 ? (
             <div className="flex flex-col items-center justify-center flex-1 gap-3">
               <i className="fas fa-search text-3xl text-disabled" />
               <p className="text-muted text-sm">No reports match your filters</p>
@@ -693,22 +977,28 @@ export function Dashboard() {
           ) : (
             <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
               {filteredReports.map((r) => (
-                <ReportCard key={r.id} report={r} onClick={() => setShowPreview(r.id)} />
+                <ReportCard key={r.id} report={r} onClick={() => setPreviewReport(r)} />
               ))}
             </div>
           )}
         </div>
       </div>
 
-      {/* Modals */}
+      {previewReport && (
+        <ReportPreviewModal report={previewReport} onClose={() => setPreviewReport(null)} />
+      )}
+
       {showDisamb && (
         <DisambiguationModal query={pipelineTitle} candidates={disambCandidates} onClose={() => setShowDisamb(false)} onConfirm={handleDisambiguationConfirm} />
       )}
-      {showPipeline && (
-        <PipelineModal gameTitle={pipelineTitle} onClose={() => setShowPipeline(false)} onComplete={() => {}} />
-      )}
-      {previewReport && previewData && (
-        <ReportPreviewModal report={previewReport} preview={previewData} onClose={() => setShowPreview(null)} />
+
+      {showPipeline && pipelineReportId && (
+        <PipelineModal
+          reportId={pipelineReportId}
+          gameName={pipelineTitle}
+          onClose={() => setShowPipeline(false)}
+          onComplete={handlePipelineComplete}
+        />
       )}
     </div>
   );
