@@ -274,6 +274,10 @@ class ReportService:
 
         updated_at = getattr(row, "updated_at", None) or row.created_at
 
+        exec_summary  = getattr(row, "executive_summary_jsonb",  None) or None
+        thematic      = getattr(row, "thematic_analysis_jsonb",  None) or None
+        conf_analysis = getattr(row, "confidence_analysis_jsonb", None) or None
+
         return Report(
             id=str(row.id),
             game=game,
@@ -284,6 +288,9 @@ class ReportService:
             tags=list(getattr(row, "tags", None) or []),
             created_at=row.created_at,
             updated_at=updated_at,
+            executive_summary=exec_summary,
+            thematic_analysis=thematic,
+            confidence_analysis=conf_analysis,
         )
 
     async def _get_facets(self) -> Facets:

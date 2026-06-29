@@ -16,6 +16,8 @@ export interface Report {
   confidenceScore?: number | null;
   tags?: string[];
   allGenres?: string[];
+  macroSkillScores?: Record<string, number | null>;
+  executiveSummaryData?: Record<string, any>;
 }
 
 // ─── API Response Types ───────────────────────────────────────────────────────
@@ -43,10 +45,9 @@ export interface ApiReport {
   tags: string[];
   current_phase: string | null;
   pipeline_progress: number;
-  executive_summary?: Record<string, any>;
-  thematic_analysis?: Record<string, any>;
-  strategic_recommendations?: Record<string, any>;
-  game_data?: Record<string, any>;
+  executive_summary?: Record<string, any> | null;
+  thematic_analysis?: Record<string, any> | null;
+  confidence_analysis?: Record<string, any> | null;
 }
 
 export interface ApiReportListResponse {

@@ -50,6 +50,8 @@ function apiReportToLegacy(r: ApiReport): Report {
     confidenceScore: r.confidence_score,
     tags: r.tags ?? [],
     allGenres: r.game.all_genres ?? [],
+    macroSkillScores: (r.thematic_analysis?.skill_scores as Record<string, number | null>) ?? {},
+    executiveSummaryData: r.executive_summary ?? {},
   };
 }
 
@@ -230,139 +232,181 @@ function ReportCard({ report, onClick }: ReportCardProps) {
 
 // ─── ReportPreviewModal ───────────────────────────────────────────────────────
 
+const SKILL_CONFIG = [
+  { key: 'Design & Art',         icon: 'fa-palette',    color: 'from-purple-500/15 to-violet-600/10', textColor: 'text-purple-400' },
+  { key: 'User Experience',      icon: 'fa-user-circle',color: 'from-sky-500/15 to-cyan-600/10',      textColor: 'text-sky-400'    },
+  { key: 'Technology Systems',   icon: 'fa-microchip',  color: 'from-emerald-500/15 to-green-600/10', textColor: 'text-emerald-400'},
+  { key: 'Strategy Market',      icon: 'fa-chart-line', color: 'from-amber-500/15 to-orange-600/10',  textColor: 'text-amber-400'  },
+];
+
+// Normalize the loose skill keys coming from the orchestrator enrichment
+function resolveSkillScore(scores: Record<string, number | null>, configKey: string): number | null {
+  const variants: string[] = [
+    configKey,
+    configKey.toLowerCase(),
+    configKey.toLowerCase().replace(/\s+/g, '_'),
+    configKey.toLowerCase().replace(/\s+/g, '-'),
+    configKey.replace(/ /g, ''),
+  ];
+  for (const v of variants) {
+    if (scores[v] != null) return scores[v];
+  }
+  // partial match
+  const lower = configKey.toLowerCase();
+  for (const [k, v] of Object.entries(scores)) {
+    if (k.toLowerCase().includes(lower.split(' ')[0])) return v;
+  }
+  return null;
+}
+
 interface ReportPreviewModalProps {
   report: Report;
   onClose: () => void;
 }
 
 function ReportPreviewModal({ report, onClose }: ReportPreviewModalProps) {
-  const scorePercent = report.confidenceScore != null ? Math.round(report.confidenceScore * 100) : null;
+  const overlayRef = useRef<HTMLDivElement>(null);
 
-  const scoreColor =
-    scorePercent == null     ? 'text-muted'   :
-    scorePercent >= 80       ? 'text-success'  :
-    scorePercent >= 60       ? 'text-warning'  :
-                               'text-error';
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [onClose]);
 
-  const scoreBarColor =
-    scorePercent == null     ? 'bg-muted'     :
-    scorePercent >= 80       ? 'bg-success'   :
-    scorePercent >= 60       ? 'bg-warning'   :
-                               'bg-error';
+  const rawScore   = report.confidenceScore;
+  const overallScore = rawScore != null ? rawScore * 10 : null;
+  const tag        = (report.tags ?? [])[0] ?? (report.status === 'completed' ? 'Completed' : '—');
+  const scores     = report.macroSkillScores ?? {};
+  const scoreColor = overallScore == null ? 'text-muted' : overallScore >= 9 ? 'text-success' : overallScore >= 7.5 ? 'text-warning' : 'text-error';
+
+  const market: Record<string, string> = {
+    Genre:      report.genre,
+    Platforms:  report.platformNames.length ? String(report.platformNames.length) : '—',
+    Year:       report.year ? String(report.year) : '—',
+    Status:     report.status === 'completed' ? 'Done' : report.status,
+  };
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
-      onClick={onClose}
+      ref={overlayRef}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+      onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
     >
-      <div
-        className="bg-surface border border-border rounded-2xl w-full max-w-lg mx-4 shadow-modal overflow-hidden"
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Cover */}
-        <div className="relative h-48 bg-elevated">
+      <div className="bg-surface border border-border rounded-2xl w-full max-w-2xl shadow-modal max-h-[90vh] overflow-y-auto scrollbar-hide">
+
+        {/* ── Cover header ── */}
+        <div className="relative h-44 bg-elevated overflow-hidden rounded-t-2xl">
           <img
             src={report.image}
             alt={report.title}
             className="w-full h-full object-cover"
             onError={e => { (e.target as HTMLImageElement).src = `https://picsum.photos/seed/${report.id}/600/300`; }}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/40 to-transparent" />
-
-          {/* Close */}
+          <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/30 to-transparent" />
           <button
             onClick={onClose}
-            className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
+            className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/60 flex items-center justify-center text-white hover:bg-black/80 transition-colors"
           >
             <i className="fas fa-times text-xs" />
           </button>
-
-          {/* Status badge */}
-          <div className="absolute top-3 left-3">
-            {report.status === 'completed' ? (
-              <span className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-success/20 text-success border border-success/30 backdrop-blur-sm">
-                <span className="w-1.5 h-1.5 rounded-full bg-success" />
-                Done
-              </span>
-            ) : report.status === 'failed' ? (
-              <span className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-error/20 text-error border border-error/30 backdrop-blur-sm">
-                <i className="fas fa-times-circle text-[9px]" />
-                Failed
-              </span>
-            ) : null}
-          </div>
-
-          {/* Title over cover */}
-          <div className="absolute bottom-3 left-4 right-4">
-            <h2 className="text-xl font-bold text-white leading-tight drop-shadow-lg line-clamp-2">{report.title}</h2>
-            <p className="text-sm text-white/70 mt-0.5">{report.developer} · {report.year || '—'}</p>
+          <div className="absolute bottom-4 left-5 right-5">
+            <div className="flex items-end gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-accent font-medium uppercase tracking-wider mb-0.5">{report.genre}</p>
+                <h2 className="text-xl font-bold text-primary leading-tight truncate">{report.title}</h2>
+                <p className="text-xs text-muted">{report.developer} · {report.year || '—'}</p>
+              </div>
+              {overallScore != null && (
+                <div className="text-right flex-shrink-0">
+                  <p className={`text-3xl font-black ${scoreColor}`}>{overallScore.toFixed(1)}</p>
+                  <p className="text-xs text-muted truncate max-w-[100px]">{tag}</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Body */}
-        <div className="p-5 space-y-4">
-          {/* Genre + platforms row */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-xs bg-elevated border border-border text-muted px-2.5 py-1 rounded-full">
-                {report.genre}
-              </span>
-              {(report.allGenres ?? []).filter(g => g !== report.genre).slice(0, 2).map(g => (
-                <span key={g} className="text-xs bg-elevated border border-border text-muted px-2.5 py-1 rounded-full">
-                  {g}
-                </span>
-              ))}
+        {/* ── Body ── */}
+        <div className="p-5 space-y-5">
+
+          {/* Macro-Skill Analysis */}
+          <div>
+            <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Macro-Skill Analysis</p>
+            <div className="grid grid-cols-2 gap-3">
+              {SKILL_CONFIG.map((skill) => {
+                const score = resolveSkillScore(scores, skill.key);
+                return (
+                  <div key={skill.key} className={`rounded-xl p-3 bg-gradient-to-br ${skill.color} border border-border`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <i className={`fas ${skill.icon} text-xs ${skill.textColor} flex-shrink-0`} />
+                        <p className="text-xs font-semibold text-primary truncate">{skill.key}</p>
+                      </div>
+                      <span className={`text-sm font-black ${skill.textColor} flex-shrink-0 ml-1`}>
+                        {score != null ? (score * 10).toFixed(1) : '—'}
+                      </span>
+                    </div>
+                    {score != null ? (
+                      <div className="h-1 bg-black/20 rounded-full overflow-hidden mt-1">
+                        <div className={`h-full rounded-full ${skill.textColor.replace('text-', 'bg-')}`} style={{ width: `${score * 100}%` }} />
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted/60 italic">No data yet</p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-            <div className="flex gap-2">
-              {report.platforms.slice(0, 5).map((icon, i) => (
-                <i key={i} className={`${icon} text-sm text-muted`} />
+          </div>
+
+          {/* Tags */}
+          {(report.tags ?? []).length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">Tags</p>
+              <div className="flex flex-wrap gap-1.5">
+                {(report.tags ?? []).map(t => (
+                  <span key={t} className="text-xs px-2.5 py-1 rounded-full bg-accent/10 text-accent border border-accent/20">{t}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Market Intelligence */}
+          <div>
+            <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Market Intelligence</p>
+            <div className="grid grid-cols-4 gap-2">
+              {Object.entries(market).map(([key, val]) => (
+                <div key={key} className="bg-elevated rounded-xl p-3 text-center">
+                  <p className="text-sm font-bold text-primary leading-tight truncate">{val}</p>
+                  <p className="text-xs text-muted mt-0.5">{key}</p>
+                </div>
               ))}
             </div>
           </div>
 
-          {/* Confidence score */}
-          {scorePercent != null && (
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs text-muted font-medium">Analysis Confidence</span>
-                <span className={`text-sm font-bold ${scoreColor}`}>{scorePercent}%</span>
-              </div>
-              <div className="h-2 bg-elevated rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all duration-700 ${scoreBarColor}`}
-                  style={{ width: `${scorePercent}%` }}
-                />
-              </div>
-            </div>
-          )}
+          {/* Actions */}
+          <div className="flex gap-2 pt-1 border-t border-border">
+            <button className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-accent text-white text-xs font-semibold hover:bg-accent-dark transition-colors">
+              <i className="fas fa-file-alt" /> Full Report
+            </button>
+            <button className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-elevated text-primary-muted text-xs font-semibold hover:text-primary transition-colors border border-border">
+              <i className="fas fa-download" /> Export
+            </button>
+            <button
+              onClick={onClose}
+              className="flex items-center justify-center gap-1.5 py-2 px-4 rounded-lg bg-elevated text-muted text-xs hover:text-primary transition-colors border border-border"
+            >
+              Close
+            </button>
+          </div>
 
-          {/* Tags */}
-          {(report.tags ?? []).length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {(report.tags ?? []).map(tag => (
-                <span key={tag} className="text-xs px-2.5 py-1 rounded-full bg-accent/10 text-accent border border-accent/20">
-                  {tag}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* Created date */}
-          <p className="text-xs text-disabled flex items-center gap-1.5">
+          {/* Date */}
+          <p className="text-xs text-disabled flex items-center gap-1.5 -mt-2">
             <i className="fas fa-calendar-alt text-[9px]" />
             Generated {fmtDate(report.createdAt)}
           </p>
         </div>
 
-        {/* Footer */}
-        <div className="px-5 pb-5">
-          <button
-            onClick={onClose}
-            className="w-full py-2.5 rounded-xl border border-border text-sm text-muted hover:text-primary hover:border-border-hover transition-colors"
-          >
-            Close
-          </button>
-        </div>
       </div>
     </div>
   );
