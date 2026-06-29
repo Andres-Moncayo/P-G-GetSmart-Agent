@@ -381,7 +381,7 @@ function ReportPreviewModal({ report, onClose }: ReportPreviewModalProps) {
                           </p>
                         ))}
                         {weaknesses.slice(0, 1).map((w, i) => (
-                          <p key={i} className="text-[10px] text-error/70 flex gap-1 leading-snug">
+                          <p key={i} className="text-[10px] text-gray-200 text-error/70 flex gap-1 leading-snug">
                             <span className="flex-shrink-0">−</span><span className="line-clamp-1">{w}</span>
                           </p>
                         ))}
