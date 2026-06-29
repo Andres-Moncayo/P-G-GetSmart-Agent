@@ -32,14 +32,17 @@ class Facets(BaseModel):
     year_range: dict
 
 class Game(BaseModel):
-    """Legacy game model."""
+    """Game sub-object returned inside Report responses."""
     id: str
     name: str
     slug: Optional[str] = None
     release_year: Optional[int] = None
     developer: Optional[str] = None
-    genres: List[str]
-    platforms: List[str]
+    primary_genre: Optional[str] = None
+    primary_platform: Optional[str] = None
+    all_genres: List[str]
+    all_platforms: List[str]
+    cover_url: Optional[str] = None
 
 class Pagination(BaseModel):
     """Legacy pagination model."""
@@ -51,15 +54,13 @@ class Pagination(BaseModel):
     has_prev: bool
 
 class Report(BaseModel):
-    """Legacy report model."""
+    """Report item returned by list and detail endpoints."""
     id: str
     game: Game
     status: str
     current_phase: Optional[str] = None
-    progress_percent: int
-    outputs: dict
-    metadata: dict
-    summary: Optional[str] = None
+    pipeline_progress: int
+    confidence_score: Optional[float] = None
     tags: List[str]
     created_at: Any
     updated_at: Any

@@ -444,8 +444,13 @@ async def run_complete_pipeline_with_db(game_payload: dict[str, Any], tracker_re
     # PHASE 4: Database storage
     logger.info("=== PHASE 4: DATABASE STORAGE ===")
     db_storage_result = {"status": "pending", "report_id": None}
-    
-    if db_report_id and master_json and synthesis_content:
+
+    # If synthesis failed/skipped, synthesis_content is None — use the fallback markdown
+    # from synthesis_result so Phase 4 always persists whatever data is available.
+    if synthesis_content is None and synthesis_result:
+        synthesis_content = synthesis_result.get("markdown_content", "")
+
+    if db_report_id and master_json and synthesis_content is not None:
         try:
             if db_report_id:
                 await report_service.update_pipeline_progress(db_report_id, "phase4", "running", 0.0)
@@ -453,12 +458,62 @@ async def run_complete_pipeline_with_db(game_payload: dict[str, Any], tracker_re
                 await pipeline_tracker.start_phase(tracker_id, Phase.STORAGE)
                 await pipeline_tracker.update_phase_progress(tracker_id, 5.0, "Phase 4 storage started")
 
+            # Enrich master_json with the structured JSONB sections the DB expects.
+            # Phase 2 only produces game_info + macro_skill_analyses; Phase 3
+            # produces the synthesis. We combine both into the canonical shape.
+            synth_meta = {}
+            # Prefer synthesis confidence; fall back to Phase 2 average
+            phase2_avg_confidence = master_json.get("analysis_metadata", {}).get("average_confidence")
+            synth_confidence = (
+                synthesis_result.get("confidence")
+                if synthesis_result and synthesis_result.get("confidence") is not None
+                else phase2_avg_confidence
+            )
+            if synthesis_result and synthesis_result.get("status") not in ("failed", None):
+                synth_meta = synthesis_result.get("metadata", {})
+
+            skill_scores = {}
+            for skill in (master_json.get("macro_skill_analyses") or []):
+                if isinstance(skill, dict):
+                    name = skill.get("skill_name") or skill.get("metadata", {}).get("skill_name", "")
+                    score = (skill.get("metadata") or {}).get("confidence_score") or skill.get("score")
+                    if name:
+                        skill_scores[name] = score
+
+            enriched_master_json = {
+                **master_json,
+                "executive_summary": {
+                    "game_name": game_name,
+                    "overall_confidence": synth_confidence,
+                    "synthesis_status": (synthesis_result or {}).get("status"),
+                    "key_analyses": list(skill_scores.keys()),
+                    "word_count": (synthesis_result or {}).get("word_count", 0),
+                },
+                "thematic_analysis": {
+                    "macro_skill_analyses": master_json.get("macro_skill_analyses", []),
+                    "skill_scores": skill_scores,
+                },
+                "strategic_recommendations": synth_meta,
+                "risk_assessment": master_json.get("analysis_metadata", {}),
+                "confidence_analysis": {
+                    "overall_confidence": synth_confidence,
+                    "skill_scores": skill_scores,
+                    "analysis_metadata": master_json.get("analysis_metadata", {}),
+                },
+                "metadata": {
+                    "overall_confidence": synth_confidence,
+                    "game_name": game_name,
+                    "game_id": game_id,
+                    **synth_meta,
+                },
+            }
+
             saved_report = await report_service.save_analysis_results(
                 db_report_id,
                 game_id,
                 game_name,
                 platform,
-                master_json,
+                enriched_master_json,
                 synthesis_content,
             )
 
@@ -475,7 +530,7 @@ async def run_complete_pipeline_with_db(game_payload: dict[str, Any], tracker_re
             logger.info(f"Phase 4 completed: Report saved to database with ID {saved_report.id}")
             if tracker_id and tracker_id in pipeline_tracker.active_pipelines:
                 pipeline_tracker.active_pipelines[tracker_id]["result"] = db_storage_result
-                pipeline_tracker.active_pipelines[tracker_id]["db_report_id"] = saved_report.id
+                pipeline_tracker.active_pipelines[tracker_id]["db_report_id"] = str(saved_report.id)
             if tracker_id:
                 await pipeline_tracker.update_phase_progress(tracker_id, 100.0, "Phase 4 storage completed")
                 await pipeline_tracker.complete_phase(tracker_id, Phase.STORAGE)

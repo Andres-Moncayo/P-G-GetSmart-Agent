@@ -71,7 +71,7 @@ class DetailedPipelineResponse(BaseModel):
     result: Optional[Dict[str, Any]] = None
     
     # Database integration
-    db_report_id: Optional[int] = Field(None, description="Database report record ID")
+    db_report_id: Optional[str] = Field(None, description="Database report record ID")
     
     # Progress tracking
     seconds_elapsed: float = 0.0

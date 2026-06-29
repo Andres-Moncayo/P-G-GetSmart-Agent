@@ -114,34 +114,18 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       checkAuth: async () => {
-        // Prevent multiple simultaneous auth checks
         if (get().isLoading && get().isInitialized) {
           return;
         }
 
-        set({ isLoading: true });
-        
-        try {
-          // Use apiClient.getProfile() which uses the configured axios with withCredentials: true
-          // Note: Refresh is handled by the axios interceptor, so we don't need to duplicate it here
-          const user = await apiClient.getProfile();
-          get().setUser(user);
-        } catch (error: any) {
-          // Any error means we're not authenticated
-          // The axios interceptor will handle token refresh automatically ONLY for valid tokens
-          // If refresh fails, it will redirect to login
-          set({ 
-            user: null, 
-            isAuthenticated: false, 
-            error: null
-          });
-        } finally {
-          // GUARANTEE loading is set to false and initialization flag is set
-          set({ 
-            isLoading: false,
-            isInitialized: true
-          });
-        }
+        const hasToken = !!localStorage.getItem('gs_access_token');
+
+        set({
+          isAuthenticated: hasToken,
+          isLoading: false,
+          isInitialized: true,
+          ...(hasToken ? {} : { user: null, error: null }),
+        });
       },
     }),
     {

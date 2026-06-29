@@ -1,13 +1,53 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { REPORTS, REPORT_PREVIEWS, GENRE_FILTERS, DEV_FILTERS, PLATFORM_FILTERS, DATE_FILTERS, REPORT_DATES } from '../data/gameData';
-import type { Report, ReportPreview, GameCandidate } from '../types/game';
+import { DATE_FILTERS } from '../data/gameData';
+import type { Report, GameCandidate, ApiReport, ApiReportListResponse } from '../types/game';
 import { apiClient } from '../services/api';
 
 function fmtDate(iso: string | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// ─── API → Legacy adapter ─────────────────────────────────────────────────────
+
+const PLATFORM_ICON: Record<string, string> = {
+  'PC': 'fab fa-windows',
+  'PlayStation 4': 'fab fa-playstation',
+  'PlayStation 5': 'fab fa-playstation',
+  'PlayStation 3': 'fab fa-playstation',
+  'Xbox One': 'fab fa-xbox',
+  'Xbox Series X': 'fab fa-xbox',
+  'Xbox Series S': 'fab fa-xbox',
+  'Xbox 360': 'fab fa-xbox',
+  'Nintendo Switch': 'fas fa-gamepad',
+  'macOS': 'fab fa-apple',
+  'iOS': 'fab fa-apple',
+  'Android': 'fab fa-android',
+};
+
+const PHASE_NUM: Record<string, number> = {
+  ingestion: 1, consolidation: 2, analysis: 3, synthesis: 4,
+};
+
+function apiReportToLegacy(r: ApiReport): Report {
+  const platforms = (r.game.all_platforms ?? []).map(p => PLATFORM_ICON[p] ?? 'fas fa-gamepad');
+  const phaseNum = r.current_phase ? (PHASE_NUM[r.current_phase.toLowerCase()] ?? 1) : 1;
+  const isActive = r.status === 'processing' || r.status === 'pending';
+  return {
+    id: r.id,
+    title: r.game.name,
+    developer: r.game.developer ?? 'Unknown',
+    year: r.game.release_year ?? 0,
+    genre: r.game.primary_genre ?? 'Unknown',
+    status: isActive ? 'processing' : r.status === 'failed' ? 'failed' : 'completed',
+    platforms: [...new Set(platforms)],
+    platformNames: r.game.all_platforms ?? [],
+    time: isActive ? `Phase ${phaseNum}/4` : '',
+    createdAt: r.created_at,
+    image: r.game.cover_url ?? `https://picsum.photos/seed/${r.id}/400/225`,
+    progress: r.pipeline_progress,
+  };
 }
 
 // ─── FilterCheckbox ───────────────────────────────────────────────────────────
@@ -80,7 +120,7 @@ function InPhaseCard({ report, onClick }: InPhaseCardProps) {
             <p className="text-xs text-muted truncate">{report.developer}</p>
             <p className="text-xs text-disabled flex items-center gap-1 mt-0.5">
               <i className="fas fa-calendar-alt text-[9px]" />
-              {fmtDate(REPORT_DATES[report.id])}
+              {fmtDate(report.createdAt)}
             </p>
           </div>
           <span className="flex-shrink-0 text-xs font-semibold text-warning bg-warning/10 border border-warning/20 px-2 py-0.5 rounded-full">
@@ -121,7 +161,7 @@ function InPhaseCard({ report, onClick }: InPhaseCardProps) {
 
 // ─── InPhaseSection ───────────────────────────────────────────────────────────
 
-interface InPhaseSectionProps { reports: Report[]; onClickReport: (id: number) => void; }
+interface InPhaseSectionProps { reports: Report[]; onClickReport: (id: string) => void; }
 function InPhaseSection({ reports, onClickReport }: InPhaseSectionProps) {
   if (reports.length === 0) return null;
   return (
@@ -173,12 +213,183 @@ function ReportCard({ report, onClick }: ReportCardProps) {
         <p className="text-xs text-muted">{report.developer} · {report.year}</p>
         <p className="text-xs text-disabled flex items-center gap-1 mt-0.5">
           <i className="fas fa-calendar-alt text-[9px]" />
-          {fmtDate(REPORT_DATES[report.id])}
+          {fmtDate(report.createdAt)}
         </p>
         <div className="flex gap-1.5 mt-auto pt-2">
           {report.platforms.slice(0, 4).map((icon) => (
             <i key={icon} className={`${icon} text-xs text-disabled`} />
           ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── PipelineModal ───────────────────────────────────────────────────────────
+
+const PIPELINE_PHASES = [
+  { key: 'scraping',  label: 'Scraping'   },
+  { key: 'analysis',  label: 'Analysis'   },
+  { key: 'synthesis', label: 'Synthesis'  },
+  { key: 'storage',   label: 'Storage'    },
+];
+
+interface PipelineModalProps {
+  reportId: string;
+  gameName: string;
+  onClose: () => void;
+  onComplete: () => void;
+}
+
+function PipelineModal({ reportId, gameName, onClose, onComplete }: PipelineModalProps) {
+  const [pipelineData, setPipelineData] = useState<any>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const doneRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function poll() {
+      while (!cancelled) {
+        try {
+          const data = await apiClient.getPipelineStatus(reportId);
+          if (cancelled) return;
+          setPipelineData(data);
+          if (data.is_complete && !doneRef.current) {
+            doneRef.current = true;
+            onComplete();
+            return;
+          }
+          if (data.status === 'failed' && !doneRef.current) {
+            setErrorMsg(data.message || 'Pipeline failed');
+            return;
+          }
+        } catch {
+          // keep retrying silently
+        }
+        if (!cancelled) await new Promise<void>(r => setTimeout(r, 3000));
+      }
+    }
+
+    poll();
+    return () => { cancelled = true; };
+  }, [reportId, onComplete]);
+
+  const overall   = pipelineData?.overall_progress ?? 0;
+  const phases    = pipelineData?.phases ?? {};
+  const currentMsg = pipelineData?.message ?? 'Starting pipeline…';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+      <div className="bg-surface border border-border rounded-2xl w-full max-w-md mx-4 shadow-modal">
+        {/* Header */}
+        <div className="p-5 border-b border-border flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs text-warning font-medium uppercase tracking-wider mb-1 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-warning dot-pulse inline-block" />
+              Pipeline Running
+            </p>
+            <h3 className="text-base font-bold text-primary truncate">{gameName}</h3>
+            <p className="text-xs text-muted mt-0.5 truncate">{currentMsg}</p>
+          </div>
+          <button
+            onClick={onClose}
+            title="Minimize — pipeline continues in background"
+            className="text-muted hover:text-primary flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-elevated transition-colors"
+          >
+            <i className="fas fa-minus text-xs" />
+          </button>
+        </div>
+
+        {/* Overall progress bar */}
+        <div className="px-5 pt-4">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs text-muted">Overall Progress</span>
+            <span className="text-xs font-semibold text-primary">{overall}%</span>
+          </div>
+          <div className="h-2 bg-elevated rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-warning to-amber-300 rounded-full transition-all duration-700"
+              style={{ width: `${overall}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Phase list */}
+        <div className="p-5 space-y-4">
+          {PIPELINE_PHASES.map(({ key, label }, idx) => {
+            const ph = phases[key] ?? {};
+            const st = ph.status ?? 'waiting';
+            const pr = ph.progress ?? 0;
+            const isRunning  = st === 'running';
+            const isDonePhase = st === 'completed';
+            const isFailed   = st === 'failed';
+            const isSkipped  = st === 'skipped';
+
+            return (
+              <div key={key} className="flex items-center gap-3">
+                {/* Status icon */}
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-xs ${
+                  isDonePhase ? 'bg-success/15 text-success' :
+                  isFailed    ? 'bg-error/15 text-error'    :
+                  isSkipped   ? 'bg-elevated text-muted'    :
+                  isRunning   ? 'bg-warning/15 text-warning' :
+                                'bg-elevated text-disabled'
+                }`}>
+                  {isDonePhase ? <i className="fas fa-check" /> :
+                   isFailed    ? <i className="fas fa-times" /> :
+                   isSkipped   ? <i className="fas fa-forward text-[10px]" /> :
+                   isRunning   ? <div className="w-3.5 h-3.5 border-2 border-warning/30 border-t-warning rounded-full animate-spin" /> :
+                                 <span className="font-bold text-[10px]">{idx + 1}</span>}
+                </div>
+
+                {/* Label + progress */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={`text-xs font-medium ${
+                      isDonePhase ? 'text-success' :
+                      isFailed    ? 'text-error'   :
+                      isRunning   ? 'text-warning'  :
+                                    'text-disabled'
+                    }`}>{label}</span>
+                    <span className="text-xs text-muted">
+                      {isDonePhase ? 'Done'   :
+                       isFailed    ? 'Failed' :
+                       isSkipped   ? 'Skipped':
+                       isRunning   ? `${pr}%` : ''}
+                    </span>
+                  </div>
+                  {isRunning && (
+                    <div className="h-1 bg-elevated rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-warning rounded-full transition-all duration-500"
+                        style={{ width: `${pr}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 pb-5">
+          {errorMsg ? (
+            <>
+              <div className="bg-error/10 border border-error/20 rounded-lg p-3 mb-3">
+                <p className="text-xs text-error">{errorMsg}</p>
+              </div>
+              <button onClick={onClose} className="w-full py-2 rounded-lg border border-border text-sm text-muted hover:text-primary transition-colors">
+                Close
+              </button>
+            </>
+          ) : (
+            <p className="text-xs text-disabled text-center">
+              <i className="fas fa-info-circle mr-1 text-muted" />
+              You can minimize this — the pipeline continues in the background
+            </p>
+          )}
         </div>
       </div>
     </div>
@@ -302,537 +513,8 @@ function DisambiguationModal({ query, candidates, onClose, onConfirm }: Disambig
   );
 }
 
-// ─── PipelineModal ────────────────────────────────────────────────────────────
-
-type PhaseState = 'idle' | 'running' | 'done';
-type SubtaskState = 'waiting' | 'running' | 'paused' | 'blocked' | 'completed' | 'failed';
-
-const PHASE_CONFIG = [
-  { 
-    name: 'Scraping', 
-    icon: 'fa-search', 
-    substeps: ['Buscando en bases de datos', 'Obteniendo datos del juego', 'Recopilando reseñas'],
-    color: 'from-blue-500 to-cyan-500'
-  },
-  { 
-    name: 'Análisis IA', 
-    icon: 'fa-brain', 
-    substeps: ['Tech Systems', 'Strategy & Market', 'Optimization', 'Spec Detection'],
-    color: 'from-purple-500 to-pink-500'
-  },
-  { 
-    name: 'Síntesis', 
-    icon: 'fa-layer-group', 
-    substeps: ['Procesando resultados', 'Creando insights', 'Construyendo correlaciones'],
-    color: 'from-orange-500 to-red-500'
-  },
-  { 
-    name: 'Guardar en BD', 
-    icon: 'fa-database', 
-    substeps: ['Validando datos', 'Almacenando resultados', 'Actualizando índices'],
-    color: 'from-green-500 to-emerald-500'
-  }
-];
-
-interface PipelineStatus {
-  status: 'queued' | 'processing' | 'completed' | 'failed';
-  message: string;
-  details?: any;
-  current_task?: string;
-  phase_progress?: number;
-  overall_progress?: number;
-  tasks_succeeded?: number;
-  tasks_failed?: number;
-  tasks_total?: number;
-  phases?: Record<string, {
-    status: string;
-    progress: number;
-    tasks: Array<{
-      name: string;
-      status: string;
-      progress: number;
-      error?: string;
-    }>;
-  }>;
-}
-
-interface PipelineModalProps { gameTitle: string; reportId: string; onClose: () => void; onComplete: (reportId: string, dbReportId?: number) => void; }
-function PipelineModal({ gameTitle, reportId, onClose, onComplete }: PipelineModalProps) {
-  const [currentPhase, setCurrentPhase] = useState(0);
-  const [progress, setProgress] = useState(5);
-  const [done, setDone] = useState(false);
-  const [status, setStatus] = useState<PipelineStatus | null>(null);
-  const [detailedStatus, setDetailedStatus] = useState<any>(null);
-  const [currentSubstep, setCurrentSubstep] = useState(0);
-  
-  // Map backend pipeline status to frontend phases
-  const getPhaseFromStatus = (statusInfo: PipelineStatus) => {
-    const phase = statusInfo.phase?.toLowerCase?.() || '';
-
-    if (phase === 'scraping') return 0;
-    if (phase === 'analysis') return 1;
-    if (phase === 'synthesis') return 2;
-    if (phase === 'storage') return 3;
-
-    const message = statusInfo.message.toLowerCase();
-    if (message.includes('scraping') || message.includes('phase 1')) return 0;
-    if (message.includes('analysis') || message.includes('phase 2')) return 1;
-    if (message.includes('synthesis') || message.includes('phase 3')) return 2;
-    if (message.includes('saving') || message.includes('phase 4') || message.includes('database')) return 3;
-
-    return currentPhase;
-  };
-
-  const getProgressFromStatus = (statusInfo: PipelineStatus) => {
-    if (statusInfo.overall_progress !== undefined && statusInfo.overall_progress !== null) {
-      return statusInfo.overall_progress;
-    }
-
-    const phase = getPhaseFromStatus(statusInfo);
-    const baseProgress = phase * 25;
-    const phaseProgress = statusInfo.phase_progress || 0;
-    return Math.min(100, baseProgress + (phaseProgress / 100) * 25);
-  };
-
-  // Poll for pipeline status
-  useEffect(() => {
-    if (!reportId) return;
-
-    const pollInterval = setInterval(async () => {
-      try {
-        const statusData = await apiClient.getPipelineStatus(reportId);
-        setStatus(statusData);
-        
-        // Also get detailed logs if available
-        try {
-          const detailedData = await apiClient.getPipelineLogs(reportId);
-          setDetailedStatus(detailedData);
-        } catch (e) {
-          // Detailed logs might not be available yet
-        }
-        
-if (statusData.status === 'completed' || statusData.status === 'done') {
-          setProgress(100);
-          setDone(true);
-          setCurrentPhase(4);
-          setTimeout(() => {
-            onComplete(reportId, statusData.db_report_id);
-            onClose();
-          }, 2000);
-          clearInterval(pollInterval);
-        } else if (statusData.status === 'failed') {
-          clearInterval(pollInterval);
-        } else {
-          const newPhase = getPhaseFromStatus(statusData);
-          setCurrentPhase(newPhase);
-          setProgress(getProgressFromStatus(statusData));
-          
-          // Update substep based on current task
-          if (statusData.current_task) {
-            const phaseSubsteps = PHASE_CONFIG[newPhase].substeps;
-            const substepIndex = phaseSubsteps.findIndex(step => 
-              step.toLowerCase().includes(statusData.current_task.toLowerCase()) ||
-              statusData.current_task.toLowerCase().includes(step.toLowerCase())
-            );
-            if (substepIndex !== -1) {
-              setCurrentSubstep(substepIndex);
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Failed to fetch status:', error);
-        clearInterval(pollInterval);
-      }
-    }, 1500);
-
-    return () => clearInterval(pollInterval);
-  }, [reportId, onComplete, onClose]);
-
-  const phaseIcon = (index: number, currentPhase: number, done: boolean) => {
-    if (done) return <i className="fas fa-check text-success text-xs" />;
-    if (index === currentPhase) return <div className="w-3 h-3 border-2 border-accent border-t-transparent rounded-full animate-spin" />;
-    if (index < currentPhase) return <i className="fas fa-check text-success text-xs" />;
-    return <span className="w-2 h-2 rounded-full bg-border block" />;
-  };
-
-  const getPhaseState = (index: number): PhaseState => {
-    if (done) return 'done';
-    if (index === currentPhase) return 'running';
-    if (index < currentPhase) return 'done';
-    return 'idle';
-  };
-
-const getSubstepState = (phaseIndex: number, substepIndex: number, substepName: string): SubtaskState => {
-    // Get real status from backend if available
-    const phaseKey = ['scraping', 'analysis', 'synthesis', 'storage'][phaseIndex];
-    const phaseData = status?.phases?.[phaseKey];
-    
-    if (phaseData?.tasks) {
-      const task = phaseData.tasks.find((t: any) => t.name === substepName);
-      if (task) {
-        // Map backend status to frontend states
-        const backendStatus = task.status;
-        if (backendStatus === 'COMPLETED' || backendStatus === 'completed') return 'completed';
-        if (backendStatus === 'RUNNING' || backendStatus === 'running') return 'running';
-        if (backendStatus === 'PAUSED' || backendStatus === 'paused') return 'paused';
-        if (backendStatus === 'BLOCKED' || backendStatus === 'blocked') return 'blocked';
-        if (backendStatus === 'FAILED' || backendStatus === 'failed') return 'failed';
-        if (backendStatus === 'WAITING' || backendStatus === 'waiting') return 'waiting';
-        return backendStatus as SubtaskState;
-      }
-    }
-    
-    // Only use fallback if no backend data available
-    if (done && phaseIndex < currentPhase) return 'completed';
-    if (done && phaseIndex === currentPhase) return 'completed';
-    if (phaseIndex < currentPhase) return 'completed';
-    if (phaseIndex === currentPhase) {
-      // Don't just assume completion based on index
-      const state = getPhaseState(phaseIndex);
-      return state === 'running' ? 'waiting' : 'waiting';
-    }
-    return 'waiting';
-  };
-
-  const getSubstepProgress = (phaseIndex: number, substepIndex: number, substepName: string): number => {
-    // Get real progress from backend if available
-    const phaseKey = ['scraping', 'analysis', 'synthesis', 'storage'][phaseIndex];
-    const phaseData = status?.phases?.[phaseKey];
-    
-    if (phaseData?.tasks) {
-      const task = phaseData.tasks.find((t: any) => t.name === substepName);
-      if (task) {
-        return task.progress || 0;
-      }
-    }
-    
-    // Fallback to估算
-    const state = getSubstepState(phaseIndex, substepIndex, substepName);
-    return state === 'completed' ? 100 : state === 'running' ? 50 : 0;
-  };
-
-  const getCurrentStatusMessage = () => {
-    if (done) return '✅ ¡Reporte completado con éxito!';
-    if (status?.status === 'failed') return '❌ Error en el análisis. Por favor inténtalo de nuevo.';
-    if (status?.current_task) return status.current_task;
-    if (detailedStatus?.logs?.length > 0) return detailedStatus.logs[detailedStatus.logs.length - 1].message;
-    
-    const phaseMessages = [
-      '🔍 Buscando en bases de datos de juegos...',
-      '🧠 Analizando con IA para obtener insights...',
-      '🔄 Sintetizando resultados y correlaciones...',
-      '💾 Guardando en la base de datos...'
-    ];
-    return phaseMessages[currentPhase] || 'Procesando...';
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="bg-surface border border-border rounded-2xl w-full max-w-lg mx-4 shadow-modal overflow-hidden">
-        <div className="p-5 border-b border-border">
-          <p className="text-xs text-accent font-medium uppercase tracking-wider mb-1">GetSmart Pipeline</p>
-          <h3 className="text-base font-bold text-primary truncate">{gameTitle}</h3>
-          <p className="text-xs text-muted mt-2 font-medium">{getCurrentStatusMessage()}</p>
-        </div>
-        <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto scrollbar-hide">
-          {/* Progreso general */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-muted">Progreso Total</span>
-              <span className="text-xs font-bold text-accent">{progress}%</span>
-            </div>
-            <div className="h-2 bg-elevated rounded-full overflow-hidden">
-              <div 
-                className={`h-full bg-gradient-to-r ${PHASE_CONFIG[Math.floor(currentPhase)]?.color || 'from-accent to-secondary'} rounded-full transition-all duration-700`} 
-                style={{ width: `${progress}%` }} 
-              />
-            </div>
-          </div>
-
-          {/* Estadísticas si están disponibles */}
-          {status && (status.tasks_total || status.tasks_succeeded || status.tasks_failed) && (
-            <div className="flex gap-4 text-xs">
-              <div className="flex items-center gap-1">
-                <i className="fas fa-check-circle text-success text-[10px]" />
-                <span className="text-muted">Completadas: {status.tasks_succeeded || 0}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <i className="fas fa-times-circle text-danger text-[10px]" />
-                <span className="text-muted">Fallidas: {status.tasks_failed || 0}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <i className="fas fa-list text-accent text-[10px]" />
-                <span className="text-muted">Total: {status.tasks_total || 0}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Fases con subtareas */}
-          <div className="space-y-3">
-            {PHASE_CONFIG.map((phase, i) => {
-              const state = getPhaseState(i);
-              return (
-                <div key={phase.name} className={`rounded-lg border p-3 transition-all ${
-                  state === 'running' ? 'border-accent bg-accent/5' : 
-                  state === 'done' ? 'border-success/20 bg-success/5' : 'border-border bg-elevated/30'
-                }`}>
-                  {/* Cabecera de fase */}
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
-                      {phaseIcon(i, currentPhase, done)}
-                    </div>
-                    <i className={`fas ${phase.icon} text-xs ${
-                      state === 'done' ? 'text-success' : 
-                      state === 'running' ? 'text-accent' : 'text-disabled'
-                    }`} />
-                    <span className={`text-sm font-semibold ${
-                      state === 'done' ? 'text-primary' : 
-                      state === 'running' ? 'text-accent' : 'text-disabled'
-                    }`}>{phase.name}</span>
-                    {state === 'running' && (
-                      <div className="ml-auto">
-                        <div className={`w-1.5 h-1.5 rounded-full bg-accent animate-pulse`} />
-                      </div>
-                    )}
-                  </div>
-
-{/* Subtareas de la fase */}
-                  <div className="ml-8 space-y-1.5">
-                    {phase.substeps.map((substep, j) => {
-                      const substepState = getSubstepState(i, j, substep);
-                      const substepProgress = getSubstepProgress(i, j, substep);
-                      
-                      const getStatusColor = (state: SubtaskState) => {
-                        switch (state) {
-                          case 'running': return 'bg-amber-500';
-                          case 'paused': return 'bg-yellow-500';
-                          case 'blocked': return 'bg-red-700';
-                          case 'failed': return 'bg-red-500';
-                          case 'completed': return 'bg-success';
-                          default: return 'bg-border';
-                        }
-                      };
-                      
-                      const getStatusIcon = (state: SubtaskState) => {
-                        switch (state) {
-                          case 'running': return 'fa-spinner fa-spin';
-                          case 'paused': return 'fa-pause';
-                          case 'blocked': return 'fa-lock';
-                          case 'failed': return 'fa-times';
-                          case 'completed': return 'fa-check';
-                          default: return '';
-                        }
-                      };
-                      
-                      const getStatusIconColor = (state: SubtaskState) => {
-                        switch (state) {
-                          case 'running': return 'text-amber-500';
-                          case 'paused': return 'text-yellow-500';
-                          case 'blocked': return 'text-red-700';
-                          case 'failed': return 'text-red-500';
-                          case 'completed': return 'text-success';
-                          default: return 'text-transparent';
-                        }
-                      };
-                      
-                      const getTextColor = (state: SubtaskState) => {
-                        switch (state) {
-                          case 'running': return 'text-amber-500 font-medium';
-                          case 'paused': return 'text-yellow-500';
-                          case 'blocked': return 'text-red-700 font-medium';
-                          case 'failed': return 'text-red-500 font-medium';
-                          case 'completed': return 'text-muted line-through';
-                          default: return 'text-disabled';
-                        }
-                      };
-
-                      return (
-                        <div key={j} className="flex items-center gap-2 whitespace-nowrap">
-                          {/* Status indicator */}
-                          <div className={`w-1.5 h-1.5 rounded-full transition-all flex-shrink-0 ${
-                            substepState === 'running' ? 'bg-amber-500 animate-pulse' :
-                            getStatusColor(substepState)
-                          }`} />
-                          
-                          {/* Status icon */}
-                          <i className={`fas ${
-                            getStatusIcon(substepState)
-                          } text-[8px] ${
-                            getStatusIconColor(substepState)
-                          }`} />
-                          
-                          {/* Substep name */}
-                          <span className={`text-xs transition-colors flex-1 min-w-0 ${
-                            getTextColor(substepState)
-                          }`}>
-                            {substep}
-                          </span>
-                          
-                          {/* Progress percentage */}
-                          <span className={`text-xs font-medium ${
-                            substepState === 'running' ? 'text-amber-500' : 
-                            substepState === 'completed' ? 'text-success' : 'text-muted'
-                          }`}>
-                            {substepProgress > 0 && `${substepProgress.toFixed(0)}%`}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Mini progreso de fase */}
-                  {state === 'running' && (
-                    <div className="mt-2">
-                      <div className="h-0.5 bg-elevated rounded-full overflow-hidden">
-                        <div className={`h-full bg-gradient-to-r ${phase.color} rounded-full animate-pulse`} style={{ width: '75%' }} />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Logs detallados si están disponibles */}
-          {detailedStatus?.logs?.length > 0 && (
-            <div className="bg-elevated/50 rounded-lg p-3">
-              <p className="text-xs font-semibold text-muted mb-2">Actividad reciente:</p>
-              <div className="space-y-1 max-h-20 overflow-y-auto scrollbar-hide">
-                {detailedStatus.logs.slice(-5).reverse().map((log: any, i: number) => (
-                  <div key={i} className="text-xs text-muted flex items-start gap-2">
-                    <div className="w-1 h-1 rounded-full bg-accent mt-1.5 flex-shrink-0" />
-                    <span>{log.message || log}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Estado final */}
-          {done && (
-            <div className="text-center py-3 border-t border-border">
-              <i className="fas fa-check-circle text-success text-2xl mb-2" />
-              <p className="text-sm font-semibold text-success">¡Reporte listo para revisar!</p>
-            </div>
-          )}
-          {status?.status === 'failed' && (
-            <div className="text-center py-3 border-t border-border">
-              <i className="fas fa-exclamation-triangle text-danger text-2xl mb-2" />
-              <p className="text-sm font-semibold text-danger">El análisis falló. Por favor intenta nuevamente.</p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── ReportPreviewModal ───────────────────────────────────────────────────────
-
-interface ReportPreviewModalProps { report: Report; preview: ReportPreview; onClose: () => void; }
-function ReportPreviewModal({ report, preview, onClose }: ReportPreviewModalProps) {
-  const overlayRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [onClose]);
-
-  const scoreColor = preview.overallScore >= 9 ? 'text-success' : preview.overallScore >= 7.5 ? 'text-warning' : 'text-danger';
-
-  return (
-    <div ref={overlayRef} className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
-      onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}>
-      <div className="bg-surface border border-border rounded-2xl w-full max-w-2xl shadow-modal max-h-[90vh] overflow-y-auto scrollbar-hide">
-        <div className="relative h-44 bg-elevated overflow-hidden rounded-t-2xl">
-          <img src={report.image} alt={report.title} className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/30 to-transparent" />
-          <button onClick={onClose} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/60 flex items-center justify-center text-white hover:bg-black/80 transition-colors">
-            <i className="fas fa-times text-xs" />
-          </button>
-          <div className="absolute bottom-4 left-5 right-16">
-            <div className="flex items-end gap-3">
-              <div className="flex-1">
-                <p className="text-xs text-accent font-medium uppercase tracking-wider mb-0.5">{report.genre}</p>
-                <h2 className="text-xl font-bold text-primary leading-tight">{report.title}</h2>
-                <p className="text-xs text-muted">{report.developer} · {report.year}</p>
-              </div>
-              <div className="text-right">
-                <p className={`text-3xl font-black ${scoreColor}`}>{preview.overallScore.toFixed(1)}</p>
-                <p className="text-xs text-muted">{preview.tag}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="p-5 space-y-5">
-          <p className="text-sm text-primary-muted leading-relaxed">{preview.summary}</p>
-          <div>
-            <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Macro-Skill Analysis</p>
-            <div className="grid grid-cols-2 gap-3">
-              {preview.macroSkills.map((skill) => (
-                <div key={skill.name} className={`rounded-xl p-3 bg-gradient-to-br ${skill.color} border border-border`}>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <i className={`fas ${skill.icon} text-xs ${skill.textColor}`} />
-                      <p className="text-xs font-semibold text-primary">{skill.name}</p>
-                    </div>
-                    <span className={`text-sm font-black ${skill.textColor}`}>{skill.score.toFixed(1)}</span>
-                  </div>
-                  <p className="text-xs text-muted leading-snug mb-2 line-clamp-2">{skill.summary}</p>
-                  <div className="space-y-1">
-                    {skill.strengths.slice(0, 2).map((s) => (
-                      <div key={s} className="flex items-start gap-1.5 text-xs text-primary-muted">
-                        <i className="fas fa-plus text-success mt-0.5 flex-shrink-0 text-[9px]" />{s}
-                      </div>
-                    ))}
-                    {skill.weaknesses.slice(0, 1).map((w) => (
-                      <div key={w} className="flex items-start gap-1.5 text-xs text-primary-muted">
-                        <i className="fas fa-minus text-danger mt-0.5 flex-shrink-0 text-[9px]" />{w}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Market Intelligence</p>
-            <div className="grid grid-cols-4 gap-2">
-              {Object.entries(preview.market).map(([key, val]) => (
-                <div key={key} className="bg-elevated rounded-xl p-3 text-center">
-                  <p className="text-sm font-bold text-primary leading-tight">{val}</p>
-                  <p className="text-xs text-muted mt-0.5">{key}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="flex gap-2 pt-1 border-t border-border">
-            <button className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-accent text-white text-xs font-semibold hover:bg-accent-dark transition-colors">
-              <i className="fas fa-file-pdf" /> PDF
-            </button>
-            <button className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-elevated text-primary-muted text-xs font-semibold hover:bg-bg-hover hover:text-primary transition-colors border border-border">
-              <i className="fas fa-code" /> JSON
-            </button>
-            <button className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-elevated text-primary-muted text-xs font-semibold hover:bg-bg-hover hover:text-primary transition-colors border border-border">
-              <i className="fas fa-share-alt" /> Share
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Dashboard ────────────────────────────────────────────────────────────────
 
 type SortKey = 'recent' | 'alpha' | 'year';
-
-const platformIcon: Record<string, string> = {
-  'PC': 'fab fa-windows',
-  'PlayStation': 'fab fa-playstation',
-  'Xbox': 'fab fa-xbox',
-  'Switch': 'fas fa-gamepad',
-};
 
 export function Dashboard() {
   const [search, setSearch]               = useState('');
@@ -842,44 +524,36 @@ export function Dashboard() {
   const [platformFilters, setPlatFilters] = useState<string[]>([]);
   const [dateFilter, setDateFilter]       = useState<number | null>(null);
 
-  const [showDisamb, setShowDisamb]         = useState(false);
-  const [showPipeline, setShowPipeline]     = useState(false);
-  const [showPreview, setShowPreview]       = useState<string | null>(null);
-  const [inputQuery, setInputQuery]         = useState('');
-  const [pipelineTitle, setPipelineTitle]   = useState('');
-  const [pipelineReportId, setPipelineReportId] = useState<string | null>(null);
+  const [showDisamb, setShowDisamb]           = useState(false);
+  const [inputQuery, setInputQuery]           = useState('');
+  const [pipelineTitle, setPipelineTitle]     = useState('');
   const [disambCandidates, setDisambCandidates] = useState<GameCandidate[]>([]);
-const [reports, setReports]               = useState<Report[]>([]);
+  const [reports, setReports]                 = useState<Report[]>([]);
+  const [facets, setFacets]                   = useState<ApiReportListResponse['facets'] | null>(null);
   const [isLoadingReports, setIsLoadingReports] = useState(false);
-  const [isGenerating, setIsGenerating]     = useState(false);
-  const navigate = useNavigate();
+  const [isGenerating, setIsGenerating]       = useState(false);
+  const [showPipeline, setShowPipeline]       = useState(false);
+  const [pipelineReportId, setPipelineReportId] = useState<string | null>(null);
 
-  // Load reports from API
-  useEffect(() => {
-    async function loadReports() {
-      setIsLoadingReports(true);
-      try {
-        // TODO: Create API endpoint for fetching reports
-        // const apiReports = await apiClient.getReports();
-        // setReports(apiReports);
-        
-        // For now, use the hardcoded data but load it into state
-        setReports(REPORTS);
-      } catch (error) {
-        console.error('Failed to load reports:', error);
-      } finally {
-        setIsLoadingReports(false);
-      }
+  async function loadReports() {
+    setIsLoadingReports(true);
+    try {
+      const data = await apiClient.getReports({ page: 1, page_size: 200 });
+      setReports(data.items.map(apiReportToLegacy));
+      setFacets(data.facets);
+    } catch (error) {
+      console.error('Failed to load reports:', error);
+    } finally {
+      setIsLoadingReports(false);
     }
+  }
 
-    loadReports();
-  }, []);
+  useEffect(() => { loadReports(); }, []);
 
   function toggle<T>(arr: T[], val: T): T[] {
     return arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val];
   }
 
-// In-pipeline games — shown in dedicated section, also search-filtered
   const inPhaseReports = useMemo(() => {
     const processing = reports.filter((r) => r.status === 'processing');
     if (!search.trim()) return processing;
@@ -887,7 +561,6 @@ const [reports, setReports]               = useState<Report[]>([]);
     return processing.filter((r) => r.title.toLowerCase().includes(q) || r.developer.toLowerCase().includes(q));
   }, [search, reports]);
 
-  // Completed games — main grid
   const filteredReports = useMemo(() => {
     let list = reports.filter((r) => r.status !== 'processing');
 
@@ -899,30 +572,21 @@ const [reports, setReports]               = useState<Report[]>([]);
     if (devFilters.length)      list = list.filter((r) => devFilters.includes(r.developer));
     if (platformFilters.length) {
       list = list.filter((r) =>
-        platformFilters.some((pf) => {
-          const icon = platformIcon[pf];
-          return icon && r.platforms.includes(icon);
-        })
+        platformFilters.some((pf) => r.platformNames.some((n) => n === pf))
       );
     }
     if (dateFilter !== null) {
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - dateFilter);
-      list = list.filter((r) => {
-        const d = REPORT_DATES[r.id];
-        return d && new Date(d) >= cutoff;
-      });
+      list = list.filter((r) => r.createdAt && new Date(r.createdAt) >= cutoff);
     }
 
-    if (sortKey === 'alpha')  list = [...list].sort((a, b) => a.title.localeCompare(b.title));
-    else if (sortKey === 'year') list = [...list].sort((a, b) => b.year - a.year);
-    else list = [...list].sort((a, b) => {
-      const da = REPORT_DATES[a.id] ?? ''; const db = REPORT_DATES[b.id] ?? '';
-      return db.localeCompare(da);
-    });
+    if (sortKey === 'alpha')       list = [...list].sort((a, b) => a.title.localeCompare(b.title));
+    else if (sortKey === 'year')   list = [...list].sort((a, b) => b.year - a.year);
+    else list = [...list].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
 
     return list;
-  }, [search, genreFilters, devFilters, platformFilters, dateFilter, sortKey]);
+  }, [search, genreFilters, devFilters, platformFilters, dateFilter, sortKey, reports]);
 
   const hasFilters = genreFilters.length + devFilters.length + platformFilters.length > 0 || dateFilter !== null;
 
@@ -947,11 +611,9 @@ const [reports, setReports]               = useState<Report[]>([]);
     }
   }
 
-async function handleDisambiguationConfirm(game: GameCandidate) {
+  async function handleDisambiguationConfirm(game: GameCandidate) {
     setShowDisamb(false);
-    setPipelineTitle(game.name);
     setIsGenerating(true);
-
     try {
       const response = await apiClient.startPipeline(game.id);
       setPipelineReportId(response.report_id);
@@ -964,8 +626,11 @@ async function handleDisambiguationConfirm(game: GameCandidate) {
     }
   }
 
-const previewReport = showPreview !== null ? reports.find((r) => r.id === showPreview) : null;
-  const previewData   = showPreview !== null ? REPORT_PREVIEWS[showPreview] : null;
+  function handlePipelineComplete() {
+    setShowPipeline(false);
+    setPipelineReportId(null);
+    loadReports();
+  }
 
   const totalCompleted = reports.filter((r) => r.status !== 'processing').length;
 
@@ -1022,28 +687,28 @@ const previewReport = showPreview !== null ? reports.find((r) => r.id === showPr
 
           <div>
             <p className="text-xs font-semibold text-primary mb-2">Genre</p>
-            {GENRE_FILTERS.map((f) => (
-              <FilterCheckbox key={f.label} label={f.label} count={f.count}
-                checked={genreFilters.includes(f.label)}
-                onChange={() => setGenreFilters(toggle(genreFilters, f.label))} />
+            {(facets?.genre ?? []).map((f) => (
+              <FilterCheckbox key={f.value} label={f.value} count={f.count}
+                checked={genreFilters.includes(f.value)}
+                onChange={() => setGenreFilters(toggle(genreFilters, f.value))} />
             ))}
           </div>
 
           <div>
             <p className="text-xs font-semibold text-primary mb-2">Developer</p>
-            {DEV_FILTERS.map((f) => (
-              <FilterCheckbox key={f.label} label={f.label} count={f.count}
-                checked={devFilters.includes(f.label)}
-                onChange={() => setDevFilters(toggle(devFilters, f.label))} />
+            {(facets?.developer ?? []).map((f) => (
+              <FilterCheckbox key={f.value} label={f.value} count={f.count}
+                checked={devFilters.includes(f.value)}
+                onChange={() => setDevFilters(toggle(devFilters, f.value))} />
             ))}
           </div>
 
           <div>
             <p className="text-xs font-semibold text-primary mb-2">Platform</p>
-            {PLATFORM_FILTERS.map((f) => (
-              <FilterCheckbox key={f.label} label={f.label} count={f.count}
-                checked={platformFilters.includes(f.label)}
-                onChange={() => setPlatFilters(toggle(platformFilters, f.label))} />
+            {(facets?.platform ?? []).map((f) => (
+              <FilterCheckbox key={f.value} label={f.value} count={f.count}
+                checked={platformFilters.includes(f.value)}
+                onChange={() => setPlatFilters(toggle(platformFilters, f.value))} />
             ))}
           </div>
 
@@ -1060,7 +725,7 @@ const previewReport = showPreview !== null ? reports.find((r) => r.id === showPr
         {/* Grid */}
         <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 flex flex-col min-h-0">
           {/* In Pipeline section */}
-          <InPhaseSection reports={inPhaseReports} onClickReport={(id) => setShowPreview(id)} />
+          <InPhaseSection reports={inPhaseReports} onClickReport={() => {}} />
 
           {/* Completed header */}
           <div className="flex items-center justify-between mb-4 flex-shrink-0">
@@ -1073,7 +738,12 @@ const previewReport = showPreview !== null ? reports.find((r) => r.id === showPr
             </p>
           </div>
 
-          {filteredReports.length === 0 ? (
+          {isLoadingReports ? (
+            <div className="flex flex-col items-center justify-center flex-1 gap-3">
+              <div className="w-6 h-6 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
+              <p className="text-muted text-sm">Loading reports…</p>
+            </div>
+          ) : filteredReports.length === 0 ? (
             <div className="flex flex-col items-center justify-center flex-1 gap-3">
               <i className="fas fa-search text-3xl text-disabled" />
               <p className="text-muted text-sm">No reports match your filters</p>
@@ -1083,33 +753,24 @@ const previewReport = showPreview !== null ? reports.find((r) => r.id === showPr
           ) : (
             <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
               {filteredReports.map((r) => (
-                <ReportCard key={r.id} report={r} onClick={() => setShowPreview(r.id)} />
+                <ReportCard key={r.id} report={r} onClick={() => {}} />
               ))}
             </div>
           )}
         </div>
       </div>
 
-      {/* Modals */}
       {showDisamb && (
         <DisambiguationModal query={pipelineTitle} candidates={disambCandidates} onClose={() => setShowDisamb(false)} onConfirm={handleDisambiguationConfirm} />
       )}
+
       {showPipeline && pipelineReportId && (
-        <PipelineModal 
-          gameTitle={pipelineTitle}
+        <PipelineModal
           reportId={pipelineReportId}
-          onClose={() => { setShowPipeline(false); setPipelineReportId(null); }}
-          onComplete={(reportId, dbReportId) => {
-            if (dbReportId) {
-              navigate(`/pipeline/${reportId}?db_report_id=${dbReportId}`);
-            } else {
-              navigate(`/pipeline/${reportId}`);
-            }
-          }}
+          gameName={pipelineTitle}
+          onClose={() => setShowPipeline(false)}
+          onComplete={handlePipelineComplete}
         />
-      )}
-      {previewReport && previewData && (
-        <ReportPreviewModal report={previewReport} preview={previewData} onClose={() => setShowPreview(null)} />
       )}
     </div>
   );
