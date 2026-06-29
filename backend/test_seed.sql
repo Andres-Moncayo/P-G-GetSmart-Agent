@@ -328,42 +328,54 @@ INSERT INTO reports (
     NOW() - INTERVAL '10 days' + INTERVAL '30 seconds',
 
     -- markdown_content — prueba GET /content?format=markdown
-    E'# Elden Ring — GetSmart Market Intelligence Report\n\n'
-    E'## Executive Summary\n\n'
-    E'Elden Ring represents a watershed moment in the action-RPG genre. '
-    E'FromSoftware''s collaboration with George R.R. Martin produced a world of '
-    E'unparalleled depth that simultaneously appealed to veteran Souls fans and a '
-    E'mainstream global audience. 21M+ copies in 12 months. Metacritic 96.\n\n'
-    E'## Design & Art · 9.5\n\n'
-    E'Six distinct biomes each with unique architectural language and enemy factions. '
-    E'Environmental storytelling replaces explicit narrative delivery.\n\n'
-    E'**Strengths:** Breathtaking vistas · iconic boss designs · lore through design.\n'
-    E'**Weaknesses:** Some underground visual repetition.\n\n'
-    E'## User Experience · 8.8\n\n'
-    E'Intentionally minimalist UI defines the franchise. No quest markers. '
-    E'Discovery-driven design polarizes audiences but creates unique agency.\n\n'
-    E'**Strengths:** Optional HUD · organic lore discovery · co-op reduces spikes.\n'
-    E'**Weaknesses:** No quest markers · steep newcomer barrier.\n\n'
-    E'## Technology & Systems · 9.1\n\n'
-    E'600+ weapons with unique movesets. Hundreds of viable build paths. '
-    E'Physics-based combat interactions reward mastery across hundreds of hours.\n\n'
-    E'**Strengths:** Deep build variety · robust PvP/co-op · physics combat.\n'
-    E'**Weaknesses:** No native cross-play.\n\n'
-    E'## Strategy & Market · 9.6\n\n'
-    E'| Metric | Value |\n'
-    E'|---|---|\n'
-    E'| Copies Sold | 21M+ in 12 months |\n'
-    E'| Metacritic | 96/100 |\n'
-    E'| Revenue Est. | $1.5B+ |\n'
-    E'| GOTY Awards | 127+ |\n\n'
-    E'## Strategic Recommendations\n\n'
-    E'1. Monitor open-world competitors (TotK, Horizon) for design response.\n'
-    E'2. DLC (Shadow of the Erdtree) should expand lore depth over difficulty loops.\n'
-    E'3. Explore cross-media IP — G.R.R. Martin collaboration as template.\n\n'
-    E'## Risk Assessment\n\n'
-    E'- **High:** Souls-like sub-genre saturation (15+ competitors 2022-2024).\n'
-    E'- **Medium:** Player burnout on difficulty as primary selling point.\n'
-    E'- **Low:** Console exclusivity pressure.\n',
+    $md$# Elden Ring — GetSmart Market Intelligence Report
+
+## Executive Summary
+
+Elden Ring represents a watershed moment in the action-RPG genre. FromSoftware's collaboration with George R.R. Martin produced a world of unparalleled depth that simultaneously appealed to veteran Souls fans and a mainstream global audience. 21M+ copies in 12 months. Metacritic 96.
+
+## Design & Art · 9.5
+
+Six distinct biomes each with unique architectural language and enemy factions. Environmental storytelling replaces explicit narrative delivery.
+
+**Strengths:** Breathtaking vistas · iconic boss designs · lore through design.
+**Weaknesses:** Some underground visual repetition.
+
+## User Experience · 8.8
+
+Intentionally minimalist UI defines the franchise. No quest markers. Discovery-driven design polarizes audiences but creates unique agency.
+
+**Strengths:** Optional HUD · organic lore discovery · co-op reduces spikes.
+**Weaknesses:** No quest markers · steep newcomer barrier.
+
+## Technology & Systems · 9.1
+
+600+ weapons with unique movesets. Hundreds of viable build paths. Physics-based combat interactions reward mastery across hundreds of hours.
+
+**Strengths:** Deep build variety · robust PvP/co-op · physics combat.
+**Weaknesses:** No native cross-play.
+
+## Strategy & Market · 9.6
+
+| Metric | Value |
+|---|---|
+| Copies Sold | 21M+ in 12 months |
+| Metacritic | 96/100 |
+| Revenue Est. | $1.5B+ |
+| GOTY Awards | 127+ |
+
+## Strategic Recommendations
+
+1. Monitor open-world competitors (TotK, Horizon) for design response.
+2. DLC (Shadow of the Erdtree) should expand lore depth over difficulty loops.
+3. Explore cross-media IP — G.R.R. Martin collaboration as template.
+
+## Risk Assessment
+
+- **High:** Souls-like sub-genre saturation (15+ competitors 2022-2024).
+- **Medium:** Player burnout on difficulty as primary selling point.
+- **Low:** Console exclusivity pressure.
+$md$,
 
     'Elden Ring — 21M+ copies, 96 Metacritic, 127+ GOTY awards. Redefined action-RPG open-world design and FromSoftware''s commercial ceiling.',
 
@@ -419,18 +431,19 @@ INSERT INTO reports (
     NOW() - INTERVAL '8 days' + INTERVAL '22 seconds',
     NOW() - INTERVAL '8 days' + INTERVAL '22 seconds',
 
-    E'# Hollow Knight — GetSmart Market Intelligence Report\n\n'
-    E'## Executive Summary\n\n'
-    E'Hollow Knight is arguably the finest indie game ever made — a Metroidvania of '
-    E'astonishing scale and melancholic beauty built by a team of three people on a '
-    E'$57,000 Kickstarter budget. 6M+ copies sold at $15 redefined what independent '
-    E'studios could achieve commercially and artistically.\n\n'
-    E'| Metric | Value |\n'
-    E'|---|---|\n'
-    E'| Copies Sold | 6M+ |\n'
-    E'| Budget | $57,000 Kickstarter |\n'
-    E'| Price | $14.99 |\n'
-    E'| Metacritic | 90/100 |\n',
+    $md$# Hollow Knight — GetSmart Market Intelligence Report
+
+## Executive Summary
+
+Hollow Knight is arguably the finest indie game ever made — a Metroidvania of astonishing scale and melancholic beauty built by a team of three people on a $57,000 Kickstarter budget. 6M+ copies sold at $15 redefined what independent studios could achieve commercially and artistically.
+
+| Metric | Value |
+|---|---|
+| Copies Sold | 6M+ |
+| Budget | $57,000 Kickstarter |
+| Price | $14.99 |
+| Metacritic | 90/100 |
+$md$,
 
     'Hollow Knight — 6M+ copies at $15 by a 3-person team. Defined Metroidvania genre quality for a generation.',
 
@@ -481,17 +494,19 @@ INSERT INTO reports (
     NOW() - INTERVAL '15 days' + INTERVAL '27 seconds',
     NOW() - INTERVAL '15 days' + INTERVAL '27 seconds',
 
-    E'# Cyberpunk 2077 — GetSmart Market Intelligence Report\n\n'
-    E'## Executive Summary\n\n'
-    E'Cyberpunk 2077 is gaming''s greatest comeback story. A catastrophic launch was '
-    E'followed by a 3-year redemption arc — the 2.0 overhaul rebuilt core systems '
-    E'from scratch, and Phantom Liberty proved the IP still had commercial momentum.\n\n'
-    E'| Metric | Value |\n'
-    E'|---|---|\n'
-    E'| Pre-orders | 13M (record at release) |\n'
-    E'| Lifetime Sales | 25M+ |\n'
-    E'| Metacritic PC | 86/100 |\n'
-    E'| Peak Steam (2.0) | 1M concurrent |\n',
+    $md$# Cyberpunk 2077 — GetSmart Market Intelligence Report
+
+## Executive Summary
+
+Cyberpunk 2077 is gaming's greatest comeback story. A catastrophic launch was followed by a 3-year redemption arc — the 2.0 overhaul rebuilt core systems from scratch, and Phantom Liberty proved the IP still had commercial momentum.
+
+| Metric | Value |
+|---|---|
+| Pre-orders | 13M (record at release) |
+| Lifetime Sales | 25M+ |
+| Metacritic PC | 86/100 |
+| Peak Steam (2.0) | 1M concurrent |
+$md$,
 
     'Cyberpunk 2077 — 25M lifetime sales; gaming''s greatest comeback via 2.0 overhaul and Phantom Liberty after a catastrophic launch.',
 
@@ -542,18 +557,19 @@ INSERT INTO reports (
     NOW() - INTERVAL '20 days' + INTERVAL '35 seconds',
     NOW() - INTERVAL '20 days' + INTERVAL '35 seconds',
 
-    E'# Baldur''s Gate 3 — GetSmart Market Intelligence Report\n\n'
-    E'## Executive Summary\n\n'
-    E'Baldur''s Gate 3 is the most ambitious RPG ever shipped — 200+ hours of genuinely '
-    E'reactive storytelling with D&D 5e mechanics translated perfectly to the medium. '
-    E'10M+ copies in year one proved that quality-first development can outperform '
-    E'live-service models even in 2023.\n\n'
-    E'| Metric | Value |\n'
-    E'|---|---|\n'
-    E'| Year-One Sales | 10M+ |\n'
-    E'| Metacritic | 96/100 |\n'
-    E'| Peak Steam | 875,343 concurrent |\n'
-    E'| GOTY Awards | 50+ |\n',
+    $md$# Baldur's Gate 3 — GetSmart Market Intelligence Report
+
+## Executive Summary
+
+Baldur's Gate 3 is the most ambitious RPG ever shipped — 200+ hours of genuinely reactive storytelling with D&D 5e mechanics translated perfectly to the medium. 10M+ copies in year one proved that quality-first development can outperform live-service models even in 2023.
+
+| Metric | Value |
+|---|---|
+| Year-One Sales | 10M+ |
+| Metacritic | 96/100 |
+| Peak Steam | 875,343 concurrent |
+| GOTY Awards | 50+ |
+$md$,
 
     'Baldur''s Gate 3 — 10M+ copies year one; redefined premium RPG expectations; 50+ GOTY awards.',
 
@@ -604,17 +620,19 @@ INSERT INTO reports (
     NOW() - INTERVAL '12 days' + INTERVAL '26 seconds',
     NOW() - INTERVAL '12 days' + INTERVAL '26 seconds',
 
-    E'# God of War Ragnarök — GetSmart Market Intelligence Report\n\n'
-    E'## Executive Summary\n\n'
-    E'God of War Ragnarök is Santa Monica Studio''s crowning achievement — a cinematic '
-    E'spectacle delivering across all Nine Realms. 11M copies in week one and '
-    E'259 GOTY nominations established new benchmarks for PlayStation exclusives.\n\n'
-    E'| Metric | Value |\n'
-    E'|---|---|\n'
-    E'| Week-1 Sales | 11M |\n'
-    E'| GOTY Nominations | 259 |\n'
-    E'| Metacritic | 94/100 |\n'
-    E'| Accessibility Options | 59 |\n',
+    $md$# God of War Ragnarök — GetSmart Market Intelligence Report
+
+## Executive Summary
+
+God of War Ragnarök is Santa Monica Studio's crowning achievement — a cinematic spectacle delivering across all Nine Realms. 11M copies in week one and 259 GOTY nominations established new benchmarks for PlayStation exclusives.
+
+| Metric | Value |
+|---|---|
+| Week-1 Sales | 11M |
+| GOTY Nominations | 259 |
+| Metacritic | 94/100 |
+| Accessibility Options | 59 |
+$md$,
 
     'God of War Ragnarök — 11M copies week one; 259 GOTY nominations; cinematic action game benchmark.',
 
@@ -742,49 +760,54 @@ INSERT INTO reports (
     NOW() - INTERVAL '5 days' + INTERVAL '20 seconds',
     NOW() - INTERVAL '5 days' + INTERVAL '20 seconds',
 
-    E'# Disco Elysium — GetSmart Market Intelligence Report\n\n'
-    E'## Executive Summary\n\n'
-    E'Disco Elysium is the most fully realized dialogue-focused RPG ever made. '
-    E'Every sentence is authored with literary intent. The political philosophy '
-    E'it explores is more sophisticated than most published novels. '
-    E'ZA/UM won GOTY + Best Narrative + Best RPG at the 2019 Game Awards simultaneously '
-    E'— a feat never repeated by any studio.\n\n'
-    E'## Design & Art · 9.6\n\n'
-    E'A painterly visual style evoking 1920s European expressionist art — entirely '
-    E'unique in the medium. Character design expresses personality through clothing '
-    E'and posture with extraordinary precision.\n\n'
-    E'**Strengths:** Unique hand-painted environments · expressive character design '
-    E'through clothing and posture · emotional palette communication.\n'
-    E'**Weaknesses:** Most of the game takes place in one district.\n\n'
-    E'## User Experience · 9.9\n\n'
-    E'Dozens of distinct skill voices create a genuine internal chorus. No combat — '
-    E'pure dialogue and skill checks resolve all conflict. Failure states often '
-    E'produce more interesting content than success.\n\n'
-    E'**Strengths:** Failure states produce interesting content · no dead ends '
-    E'— every path is authored · skill voices feel like real characters.\n'
-    E'**Weaknesses:** Absence of traditional RPG systems alienates genre fans.\n\n'
-    E'## Technology & Systems · 8.5\n\n'
-    E'ZA/UM built a new RPG engine prioritizing dialogue systems over action. '
-    E'Full voice acting added in the Final Cut update elevated the experience '
-    E'significantly.\n\n'
-    E'**Strengths:** Unpredictable skill checks · full VO in Final Cut · '
-    E'branch-safe saves.\n'
-    E'**Weaknesses:** Switch port had significant performance issues.\n\n'
-    E'## Strategy & Market · 9.4\n\n'
-    E'| Metric | Value |\n'
-    E'|---|---|\n'
-    E'| Copies Sold | 1M+ |\n'
-    E'| Price | $39.99 |\n'
-    E'| Metacritic | 97/100 |\n'
-    E'| Game Awards 2019 | GOTY + Narrative + RPG |\n\n'
-    E'## Strategic Recommendations\n\n'
-    E'1. Final Cut is the definitive version — all distribution should point here.\n'
-    E'2. Studio situation: ZA/UM implosion removed all sequel potential.\n'
-    E'3. Long-tail Steam sale cycles will sustain discovery indefinitely.\n\n'
-    E'## Risk Assessment\n\n'
-    E'- **High:** Studio collapse removed all sequel and franchise potential.\n'
-    E'- **Medium:** IP ownership dispute between ZA/UM and original creators.\n'
-    E'- **Low:** Market niche for dialogue-only RPG is inherently limited.\n',
+    $md$# Disco Elysium — GetSmart Market Intelligence Report
+
+## Executive Summary
+
+Disco Elysium is the most fully realized dialogue-focused RPG ever made. Every sentence is authored with literary intent. The political philosophy it explores is more sophisticated than most published novels. ZA/UM won GOTY + Best Narrative + Best RPG at the 2019 Game Awards simultaneously — a feat never repeated by any studio.
+
+## Design & Art · 9.6
+
+A painterly visual style evoking 1920s European expressionist art — entirely unique in the medium. Character design expresses personality through clothing and posture with extraordinary precision.
+
+**Strengths:** Unique hand-painted environments · expressive character design through clothing and posture · emotional palette communication.
+**Weaknesses:** Most of the game takes place in one district.
+
+## User Experience · 9.9
+
+Dozens of distinct skill voices create a genuine internal chorus. No combat — pure dialogue and skill checks resolve all conflict. Failure states often produce more interesting content than success.
+
+**Strengths:** Failure states produce interesting content · no dead ends — every path is authored · skill voices feel like real characters.
+**Weaknesses:** Absence of traditional RPG systems alienates genre fans.
+
+## Technology & Systems · 8.5
+
+ZA/UM built a new RPG engine prioritizing dialogue systems over action. Full voice acting added in the Final Cut update elevated the experience significantly.
+
+**Strengths:** Unpredictable skill checks · full VO in Final Cut · branch-safe saves.
+**Weaknesses:** Switch port had significant performance issues.
+
+## Strategy & Market · 9.4
+
+| Metric | Value |
+|---|---|
+| Copies Sold | 1M+ |
+| Price | $39.99 |
+| Metacritic | 97/100 |
+| Game Awards 2019 | GOTY + Narrative + RPG |
+
+## Strategic Recommendations
+
+1. Final Cut is the definitive version — all distribution should point here.
+2. Studio situation: ZA/UM implosion removed all sequel potential.
+3. Long-tail Steam sale cycles will sustain discovery indefinitely.
+
+## Risk Assessment
+
+- **High:** Studio collapse removed all sequel and franchise potential.
+- **Medium:** IP ownership dispute between ZA/UM and original creators.
+- **Low:** Market niche for dialogue-only RPG is inherently limited.
+$md$,
 
     'Disco Elysium — 2019 Game Awards triple crown (GOTY + Narrative + RPG); finest dialogue RPG ever made; 1M+ at $40 from a first-time studio.',
 

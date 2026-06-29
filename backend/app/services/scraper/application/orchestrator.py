@@ -272,6 +272,7 @@ async def run_complete_pipeline_with_db(game_payload: dict[str, Any], tracker_re
     
 # Create initial report record in `reports` table
     db_report_id = None
+    db_game_id = game_id
     try:
         report = await report_service.create_new_report(
             game_id=game_id,
@@ -286,10 +287,8 @@ async def run_complete_pipeline_with_db(game_payload: dict[str, Any], tracker_re
             cover_url=game_payload.get("cover_url"),
         )
         db_report_id = str(report.id)
-        # Use the UUID that was actually stored in the DB (create_new_report may have
-        # replaced a non-UUID game_id like '285128' from IGDB with a fresh uuid4).
-        game_id = str(report.game_id)
-        logger.info("Created initial report record: %s (db game_id: %s)", db_report_id, game_id)
+        db_game_id = str(report.game_id)  # UUID real; puede diferir del game_id de IGDB (e.g. '285128')
+        logger.info("Created initial report record: %s (db_game_id=%s)", db_report_id, db_game_id)
         if tracker_id and tracker_id in pipeline_tracker.active_pipelines:
             pipeline_tracker.active_pipelines[tracker_id]["db_report_id"] = db_report_id
     except Exception as exc:
@@ -513,7 +512,7 @@ async def run_complete_pipeline_with_db(game_payload: dict[str, Any], tracker_re
 
             saved_report = await report_service.save_analysis_results(
                 db_report_id,
-                game_id,
+                db_game_id,
                 game_name,
                 platform,
                 enriched_master_json,
