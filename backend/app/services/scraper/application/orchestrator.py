@@ -286,7 +286,10 @@ async def run_complete_pipeline_with_db(game_payload: dict[str, Any], tracker_re
             cover_url=game_payload.get("cover_url"),
         )
         db_report_id = str(report.id)
-        logger.info("Created initial report record: %s", db_report_id)
+        # Use the UUID that was actually stored in the DB (create_new_report may have
+        # replaced a non-UUID game_id like '285128' from IGDB with a fresh uuid4).
+        game_id = str(report.game_id)
+        logger.info("Created initial report record: %s (db game_id: %s)", db_report_id, game_id)
         if tracker_id and tracker_id in pipeline_tracker.active_pipelines:
             pipeline_tracker.active_pipelines[tracker_id]["db_report_id"] = db_report_id
     except Exception as exc:

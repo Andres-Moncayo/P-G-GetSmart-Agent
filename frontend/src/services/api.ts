@@ -2,7 +2,7 @@ import axios, { type AxiosRequestConfig } from 'axios';
 import type { UserProfile, ApiKey, UserPreferences } from '../types';
 import type { GameSearchResponse, GameConfirmResponse, GameCandidate, ApiReport, ApiReportListResponse } from '../types/game';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 const TOKEN_KEY = 'gs_access_token';
 
 // Callback for navigation to avoid React Router conflicts
@@ -20,28 +20,6 @@ const handleAuthRedirect = () => {
     window.location.href = '/';
   }
 };
-
-// Utility to convert GameCandidate to scraper format
-function convertGameCandidateToScraperFormat(game: GameCandidate) {
-  // Generate a UUID for the game_id (browser-compatible)
-  const generateUUID = () => {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      const r = Math.random() * 16 | 0;
-      const v = c === 'x' ? r : (r & 0x3 | 0x8);
-      return v.toString(16);
-    });
-  };
-
-  return {
-    game_id: generateUUID(),
-    name: game.name,
-    release_year: game.release_year || new Date().getFullYear(),
-    igdb_id: 0,
-    rawg_id: game.rawg_id ? parseInt(game.rawg_id, 10) : 0,
-    steam_app_id: game.steam_app_id ? parseInt(game.steam_app_id, 10) : null,
-    aliases: []
-  };
-}
 
 class ApiClient {
   private client = axios.create({
