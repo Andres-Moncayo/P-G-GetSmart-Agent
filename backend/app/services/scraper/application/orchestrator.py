@@ -474,13 +474,41 @@ async def run_complete_pipeline_with_db(game_payload: dict[str, Any], tracker_re
             if synthesis_result and synthesis_result.get("status") not in ("failed", None):
                 synth_meta = synthesis_result.get("metadata", {})
 
-            skill_scores = {}
-            for skill in (master_json.get("macro_skill_analyses") or []):
-                if isinstance(skill, dict):
-                    name = skill.get("skill_name") or skill.get("metadata", {}).get("skill_name", "")
-                    score = (skill.get("metadata") or {}).get("confidence_score") or skill.get("score")
-                    if name:
-                        skill_scores[name] = score
+            # ── Extract per-skill structured data from Phase 2 Gemini output ──
+            # master_json["macro_skill_analyses"] is now a dict keyed by skill_key
+            # (design_art, user_experience, …) where each value is the validated
+            # Gemini response: {macro_skill, confidence_score, key_findings,
+            # strengths, weaknesses, risks, opportunities, evidence_count, summary}.
+            SKILL_LABEL_MAP = {
+                "design_art": "Design & Art",
+                "user_experience": "User Experience",
+                "technology_systems": "Technology Systems",
+                "strategy_market": "Strategy Market",
+            }
+            raw_skills: dict = master_json.get("macro_skill_analyses") or {}
+            skill_scores: dict[str, float | None] = {}
+            structured_skills: list[dict] = []
+
+            for skill_key, skill_data in raw_skills.items():
+                if not isinstance(skill_data, dict):
+                    continue
+                raw_confidence = skill_data.get("confidence_score")
+                score_0_1 = float(raw_confidence) if raw_confidence is not None else None
+                skill_label = SKILL_LABEL_MAP.get(skill_key, skill_key.replace("_", " ").title())
+                skill_scores[skill_label] = score_0_1
+                structured_skills.append({
+                    "skill_key": skill_key,
+                    "skill_label": skill_label,
+                    "score": round(score_0_1 * 10, 2) if score_0_1 is not None else None,
+                    "confidence_raw": score_0_1,
+                    "summary": skill_data.get("summary", ""),
+                    "strengths": skill_data.get("strengths", []),
+                    "weaknesses": skill_data.get("weaknesses", []),
+                    "key_findings": skill_data.get("key_findings", []),
+                    "risks": skill_data.get("risks", []),
+                    "opportunities": skill_data.get("opportunities", []),
+                    "evidence_count": skill_data.get("evidence_count", 0),
+                })
 
             enriched_master_json = {
                 **master_json,
@@ -492,8 +520,9 @@ async def run_complete_pipeline_with_db(game_payload: dict[str, Any], tracker_re
                     "word_count": (synthesis_result or {}).get("word_count", 0),
                 },
                 "thematic_analysis": {
-                    "macro_skill_analyses": master_json.get("macro_skill_analyses", []),
+                    "macro_skill_analyses": raw_skills,
                     "skill_scores": skill_scores,
+                    "structured_skills": structured_skills,
                 },
                 "strategic_recommendations": synth_meta,
                 "risk_assessment": master_json.get("analysis_metadata", {}),

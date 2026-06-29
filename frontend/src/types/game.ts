@@ -18,6 +18,7 @@ export interface Report {
   allGenres?: string[];
   macroSkillScores?: Record<string, number | null>;
   executiveSummaryData?: Record<string, any>;
+  structuredSkills?: MacroSkillStructured[];
 }
 
 // ─── API Response Types ───────────────────────────────────────────────────────
@@ -59,6 +60,20 @@ export interface ApiReportListResponse {
     developer: { value: string; count: number }[];
     status: { value: string; count: number }[];
   };
+}
+
+export interface MacroSkillStructured {
+  skill_key: string;
+  skill_label: string;
+  score: number | null;
+  confidence_raw: number | null;
+  summary: string;
+  strengths: string[];
+  weaknesses: string[];
+  key_findings: string[];
+  risks: string[];
+  opportunities: string[];
+  evidence_count: number;
 }
 
 export interface MacroSkill {

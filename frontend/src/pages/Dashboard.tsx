@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { DATE_FILTERS } from '../data/gameData';
-import type { Report, GameCandidate, ApiReport, ApiReportListResponse } from '../types/game';
+import type { Report, GameCandidate, ApiReport, ApiReportListResponse, MacroSkillStructured } from '../types/game';
 import { apiClient } from '../services/api';
 
 function fmtDate(iso: string | undefined): string {
@@ -52,6 +52,7 @@ function apiReportToLegacy(r: ApiReport): Report {
     allGenres: r.game.all_genres ?? [],
     macroSkillScores: (r.thematic_analysis?.skill_scores as Record<string, number | null>) ?? {},
     executiveSummaryData: r.executive_summary ?? {},
+    structuredSkills: (r.thematic_analysis?.structured_skills as MacroSkillStructured[] | undefined) ?? [],
   };
 }
 
@@ -273,11 +274,16 @@ function ReportPreviewModal({ report, onClose }: ReportPreviewModalProps) {
     return () => window.removeEventListener('keydown', h);
   }, [onClose]);
 
-  const rawScore   = report.confidenceScore;
+  const rawScore     = report.confidenceScore;
   const overallScore = rawScore != null ? rawScore * 10 : null;
-  const tag        = (report.tags ?? [])[0] ?? (report.status === 'completed' ? 'Completed' : '—');
-  const scores     = report.macroSkillScores ?? {};
-  const scoreColor = overallScore == null ? 'text-muted' : overallScore >= 9 ? 'text-success' : overallScore >= 7.5 ? 'text-warning' : 'text-error';
+  const tag          = (report.tags ?? [])[0] ?? (report.status === 'completed' ? 'Completed' : '—');
+  const scores       = report.macroSkillScores ?? {};
+  const scoreColor   = overallScore == null ? 'text-muted' : overallScore >= 9 ? 'text-success' : overallScore >= 7.5 ? 'text-warning' : 'text-error';
+
+  // Index structured skills by label for quick lookup
+  const structuredByLabel = Object.fromEntries(
+    (report.structuredSkills ?? []).map(s => [s.skill_label, s])
+  );
 
   const market: Record<string, string> = {
     Genre:      report.genre,
@@ -334,24 +340,54 @@ function ReportPreviewModal({ report, onClose }: ReportPreviewModalProps) {
             <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Macro-Skill Analysis</p>
             <div className="grid grid-cols-2 gap-3">
               {SKILL_CONFIG.map((skill) => {
-                const score = resolveSkillScore(scores, skill.key);
+                const structured = structuredByLabel[skill.key];
+                const scoreRaw = structured?.confidence_raw ?? resolveSkillScore(scores, skill.key);
+                const scoreDisplay = structured?.score ?? (scoreRaw != null ? scoreRaw * 10 : null);
+                const barWidth = scoreRaw != null ? scoreRaw * 100 : (scoreDisplay != null ? scoreDisplay * 10 : null);
+                const summary = structured?.summary ?? '';
+                const strengths = structured?.strengths ?? [];
+                const weaknesses = structured?.weaknesses ?? [];
+                const hasDetail = summary || strengths.length > 0 || weaknesses.length > 0;
+
                 return (
-                  <div key={skill.key} className={`rounded-xl p-3 bg-gradient-to-br ${skill.color} border border-border`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2 min-w-0">
+                  <div key={skill.key} className={`rounded-xl p-3 bg-gradient-to-br ${skill.color} border border-border flex flex-col gap-2`}>
+                    {/* Header row */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 min-w-0">
                         <i className={`fas ${skill.icon} text-xs ${skill.textColor} flex-shrink-0`} />
                         <p className="text-xs font-semibold text-primary truncate">{skill.key}</p>
                       </div>
                       <span className={`text-sm font-black ${skill.textColor} flex-shrink-0 ml-1`}>
-                        {score != null ? (score * 10).toFixed(1) : '—'}
+                        {scoreDisplay != null ? scoreDisplay.toFixed(1) : '—'}
                       </span>
                     </div>
-                    {score != null ? (
-                      <div className="h-1 bg-black/20 rounded-full overflow-hidden mt-1">
-                        <div className={`h-full rounded-full ${skill.textColor.replace('text-', 'bg-')}`} style={{ width: `${score * 100}%` }} />
+
+                    {/* Score bar */}
+                    {barWidth != null ? (
+                      <div className="h-1 bg-black/20 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${skill.textColor.replace('text-', 'bg-')}`} style={{ width: `${barWidth}%` }} />
+                      </div>
+                    ) : null}
+
+                    {/* LLM-generated detail */}
+                    {hasDetail ? (
+                      <div className="space-y-1.5 mt-0.5">
+                        {summary && (
+                          <p className="text-[10px] text-muted leading-snug line-clamp-2">{summary}</p>
+                        )}
+                        {strengths.slice(0, 2).map((s, i) => (
+                          <p key={i} className="text-[10px] text-success/80 flex gap-1 leading-snug">
+                            <span className="flex-shrink-0">+</span><span className="line-clamp-1">{s}</span>
+                          </p>
+                        ))}
+                        {weaknesses.slice(0, 1).map((w, i) => (
+                          <p key={i} className="text-[10px] text-error/70 flex gap-1 leading-snug">
+                            <span className="flex-shrink-0">−</span><span className="line-clamp-1">{w}</span>
+                          </p>
+                        ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-muted/60 italic">No data yet</p>
+                      !barWidth && <p className="text-[10px] text-muted/60 italic">No data yet</p>
                     )}
                   </div>
                 );
