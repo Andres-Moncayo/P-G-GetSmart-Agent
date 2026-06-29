@@ -13,6 +13,9 @@ export interface Report {
   createdAt: string;        // ISO date string
   image: string;
   progress?: number;
+  confidenceScore?: number | null;
+  tags?: string[];
+  allGenres?: string[];
 }
 
 // ─── API Response Types ───────────────────────────────────────────────────────

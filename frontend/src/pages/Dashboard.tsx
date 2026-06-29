@@ -47,6 +47,9 @@ function apiReportToLegacy(r: ApiReport): Report {
     createdAt: r.created_at,
     image: r.game.cover_url ?? `https://picsum.photos/seed/${r.id}/400/225`,
     progress: r.pipeline_progress,
+    confidenceScore: r.confidence_score,
+    tags: r.tags ?? [],
+    allGenres: r.game.all_genres ?? [],
   };
 }
 
@@ -219,6 +222,146 @@ function ReportCard({ report, onClick }: ReportCardProps) {
           {report.platforms.slice(0, 4).map((icon) => (
             <i key={icon} className={`${icon} text-xs text-disabled`} />
           ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ReportPreviewModal ───────────────────────────────────────────────────────
+
+interface ReportPreviewModalProps {
+  report: Report;
+  onClose: () => void;
+}
+
+function ReportPreviewModal({ report, onClose }: ReportPreviewModalProps) {
+  const scorePercent = report.confidenceScore != null ? Math.round(report.confidenceScore * 100) : null;
+
+  const scoreColor =
+    scorePercent == null     ? 'text-muted'   :
+    scorePercent >= 80       ? 'text-success'  :
+    scorePercent >= 60       ? 'text-warning'  :
+                               'text-error';
+
+  const scoreBarColor =
+    scorePercent == null     ? 'bg-muted'     :
+    scorePercent >= 80       ? 'bg-success'   :
+    scorePercent >= 60       ? 'bg-warning'   :
+                               'bg-error';
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="bg-surface border border-border rounded-2xl w-full max-w-lg mx-4 shadow-modal overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Cover */}
+        <div className="relative h-48 bg-elevated">
+          <img
+            src={report.image}
+            alt={report.title}
+            className="w-full h-full object-cover"
+            onError={e => { (e.target as HTMLImageElement).src = `https://picsum.photos/seed/${report.id}/600/300`; }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/40 to-transparent" />
+
+          {/* Close */}
+          <button
+            onClick={onClose}
+            className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
+          >
+            <i className="fas fa-times text-xs" />
+          </button>
+
+          {/* Status badge */}
+          <div className="absolute top-3 left-3">
+            {report.status === 'completed' ? (
+              <span className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-success/20 text-success border border-success/30 backdrop-blur-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-success" />
+                Done
+              </span>
+            ) : report.status === 'failed' ? (
+              <span className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-error/20 text-error border border-error/30 backdrop-blur-sm">
+                <i className="fas fa-times-circle text-[9px]" />
+                Failed
+              </span>
+            ) : null}
+          </div>
+
+          {/* Title over cover */}
+          <div className="absolute bottom-3 left-4 right-4">
+            <h2 className="text-xl font-bold text-white leading-tight drop-shadow-lg line-clamp-2">{report.title}</h2>
+            <p className="text-sm text-white/70 mt-0.5">{report.developer} · {report.year || '—'}</p>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="p-5 space-y-4">
+          {/* Genre + platforms row */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xs bg-elevated border border-border text-muted px-2.5 py-1 rounded-full">
+                {report.genre}
+              </span>
+              {(report.allGenres ?? []).filter(g => g !== report.genre).slice(0, 2).map(g => (
+                <span key={g} className="text-xs bg-elevated border border-border text-muted px-2.5 py-1 rounded-full">
+                  {g}
+                </span>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              {report.platforms.slice(0, 5).map((icon, i) => (
+                <i key={i} className={`${icon} text-sm text-muted`} />
+              ))}
+            </div>
+          </div>
+
+          {/* Confidence score */}
+          {scorePercent != null && (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs text-muted font-medium">Analysis Confidence</span>
+                <span className={`text-sm font-bold ${scoreColor}`}>{scorePercent}%</span>
+              </div>
+              <div className="h-2 bg-elevated rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-700 ${scoreBarColor}`}
+                  style={{ width: `${scorePercent}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Tags */}
+          {(report.tags ?? []).length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {(report.tags ?? []).map(tag => (
+                <span key={tag} className="text-xs px-2.5 py-1 rounded-full bg-accent/10 text-accent border border-accent/20">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Created date */}
+          <p className="text-xs text-disabled flex items-center gap-1.5">
+            <i className="fas fa-calendar-alt text-[9px]" />
+            Generated {fmtDate(report.createdAt)}
+          </p>
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 pb-5">
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 rounded-xl border border-border text-sm text-muted hover:text-primary hover:border-border-hover transition-colors"
+          >
+            Close
+          </button>
         </div>
       </div>
     </div>
@@ -532,8 +675,9 @@ export function Dashboard() {
   const [facets, setFacets]                   = useState<ApiReportListResponse['facets'] | null>(null);
   const [isLoadingReports, setIsLoadingReports] = useState(false);
   const [isGenerating, setIsGenerating]       = useState(false);
-  const [showPipeline, setShowPipeline]       = useState(false);
+  const [showPipeline, setShowPipeline]         = useState(false);
   const [pipelineReportId, setPipelineReportId] = useState<string | null>(null);
+  const [previewReport, setPreviewReport]       = useState<Report | null>(null);
 
   async function loadReports() {
     setIsLoadingReports(true);
@@ -753,12 +897,16 @@ export function Dashboard() {
           ) : (
             <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
               {filteredReports.map((r) => (
-                <ReportCard key={r.id} report={r} onClick={() => {}} />
+                <ReportCard key={r.id} report={r} onClick={() => setPreviewReport(r)} />
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {previewReport && (
+        <ReportPreviewModal report={previewReport} onClose={() => setPreviewReport(null)} />
+      )}
 
       {showDisamb && (
         <DisambiguationModal query={pipelineTitle} candidates={disambCandidates} onClose={() => setShowDisamb(false)} onConfirm={handleDisambiguationConfirm} />
