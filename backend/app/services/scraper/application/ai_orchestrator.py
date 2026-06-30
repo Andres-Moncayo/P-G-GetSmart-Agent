@@ -466,10 +466,86 @@ class AIOrchestrator:
 # Convenience function for standalone operation
 async def run_ai_analysis_pipeline(mini_contexts: Dict[str, Dict[str, Any]], game_name: str = "Unknown", game_id: str = "unknown") -> Dict[str, Any]:
     """
-    Pipeline function to run AI analysis from scraper outputs.
-    
-    This is the main entry point for Phase 2 - connects Phase 1 scraper outputs
-    to Phase 3 synthesis preparation.
+    Main entry point for Phase 2.  Runs all 4 macro-skill workers via Gemini in
+    parallel (run_parallel_ai_workers) and adapts the result to the format the
+    main orchestrator expects.
     """
-    orchestrator = AIOrchestrator()
-    return await orchestrator.run_ai_analysis(mini_contexts, game_name, game_id)
+    from .ai_workers import run_parallel_ai_workers
+
+    start_time = asyncio.get_event_loop().time()
+
+    workers_result = await run_parallel_ai_workers(
+        design_art_context=mini_contexts.get("design_art", {}),
+        user_experience_context=mini_contexts.get("user_experience", {}),
+        technology_systems_context=mini_contexts.get("technology_systems", {}),
+        strategy_market_context=mini_contexts.get("strategy_market", {}),
+    )
+
+    completed_workers: list[str] = workers_result.get("completed_workers", [])
+    failed_workers: list[str] = workers_result.get("failed_workers", [])
+    analyses_raw: Dict[str, Any] = workers_result.get("analyses", {})
+
+    # Build the successful_analyses dict expected by the enrichment step
+    successful_analyses: Dict[str, Any] = {}
+    for skill_key, entry in analyses_raw.items():
+        if entry.get("status") == "completed":
+            successful_analyses[skill_key] = entry.get("analysis", {})
+
+    # Average confidence across completed skills
+    all_confidences = [
+        v.get("confidence_score", 0.0)
+        for v in successful_analyses.values()
+        if isinstance(v, dict) and v.get("confidence_score") is not None
+    ]
+    avg_confidence = sum(all_confidences) / len(all_confidences) if all_confidences else 0.0
+
+    macro_skills = ["design_art", "user_experience", "technology_systems", "strategy_market"]
+    success_rate = len(completed_workers) / len(macro_skills)
+    overall_status = "success" if success_rate >= 0.75 else "partial" if success_rate > 0 else "failure"
+
+    duration_seconds = round(asyncio.get_event_loop().time() - start_time, 2)
+
+    master_json = {
+        "game_info": {
+            "game_name": game_name,
+            "game_id": game_id,
+            "analysis_timestamp": datetime.utcnow().isoformat() + "Z",
+            "pipeline_phase": 2,
+            "success_rate": success_rate,
+        },
+        "macro_skill_analyses": successful_analyses,
+        "analysis_metadata": {
+            "analyses_completed": completed_workers,
+            "analyses_failed": failed_workers,
+            "total_analyses": len(macro_skills),
+            "average_confidence": avg_confidence,
+            "orchestrator_version": "2.0.0",
+            "run_duration_seconds": duration_seconds,
+        },
+    }
+
+    logger.info(
+        "Phase 2 AI analysis completed via Gemini workers: %d/%d successful (%.1fs)",
+        len(completed_workers),
+        len(macro_skills),
+        duration_seconds,
+    )
+
+    return {
+        "status": overall_status,
+        "phase": 2,
+        "analyses_completed": completed_workers,
+        "analyses_failed": failed_workers,
+        "success_rate": success_rate,
+        "analysis_results": successful_analyses,
+        "master_json": master_json,
+        "metadata": {
+            "orchestrator_version": "2.0.0",
+            "run_duration_seconds": duration_seconds,
+            "total_input_evidence": sum(
+                ctx.get("metadata", {}).get("evidence_count", 0)
+                for ctx in mini_contexts.values()
+            ),
+        },
+        "output_schema": "Master-JSON_v2.0.0",
+    }

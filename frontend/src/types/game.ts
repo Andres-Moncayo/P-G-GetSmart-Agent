@@ -13,6 +13,12 @@ export interface Report {
   createdAt: string;        // ISO date string
   image: string;
   progress?: number;
+  confidenceScore?: number | null;
+  tags?: string[];
+  allGenres?: string[];
+  macroSkillScores?: Record<string, number | null>;
+  executiveSummaryData?: Record<string, any>;
+  structuredSkills?: MacroSkillStructured[];
 }
 
 // ─── API Response Types ───────────────────────────────────────────────────────
@@ -40,10 +46,9 @@ export interface ApiReport {
   tags: string[];
   current_phase: string | null;
   pipeline_progress: number;
-  executive_summary?: Record<string, any>;
-  thematic_analysis?: Record<string, any>;
-  strategic_recommendations?: Record<string, any>;
-  game_data?: Record<string, any>;
+  executive_summary?: Record<string, any> | null;
+  thematic_analysis?: Record<string, any> | null;
+  confidence_analysis?: Record<string, any> | null;
 }
 
 export interface ApiReportListResponse {
@@ -55,6 +60,20 @@ export interface ApiReportListResponse {
     developer: { value: string; count: number }[];
     status: { value: string; count: number }[];
   };
+}
+
+export interface MacroSkillStructured {
+  skill_key: string;
+  skill_label: string;
+  score: number | null;
+  confidence_raw: number | null;
+  summary: string;
+  strengths: string[];
+  weaknesses: string[];
+  key_findings: string[];
+  risks: string[];
+  opportunities: string[];
+  evidence_count: number;
 }
 
 export interface MacroSkill {

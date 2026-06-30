@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { DATE_FILTERS } from '../data/gameData';
-import type { Report, GameCandidate, ApiReport, ApiReportListResponse } from '../types/game';
+import type { Report, GameCandidate, ApiReport, ApiReportListResponse, MacroSkillStructured } from '../types/game';
 import { apiClient } from '../services/api';
 
 function fmtDate(iso: string | undefined): string {
@@ -47,6 +47,12 @@ function apiReportToLegacy(r: ApiReport): Report {
     createdAt: r.created_at,
     image: r.game.cover_url ?? `https://picsum.photos/seed/${r.id}/400/225`,
     progress: r.pipeline_progress,
+    confidenceScore: r.confidence_score,
+    tags: r.tags ?? [],
+    allGenres: r.game.all_genres ?? [],
+    macroSkillScores: (r.thematic_analysis?.skill_scores as Record<string, number | null>) ?? {},
+    executiveSummaryData: r.executive_summary ?? {},
+    structuredSkills: (r.thematic_analysis?.structured_skills as MacroSkillStructured[] | undefined) ?? [],
   };
 }
 
@@ -220,6 +226,223 @@ function ReportCard({ report, onClick }: ReportCardProps) {
             <i key={icon} className={`${icon} text-xs text-disabled`} />
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ReportPreviewModal ───────────────────────────────────────────────────────
+
+const SKILL_CONFIG = [
+  { key: 'Design & Art',         icon: 'fa-palette',    color: 'from-purple-500/15 to-violet-600/10', textColor: 'text-purple-400' },
+  { key: 'User Experience',      icon: 'fa-user-circle',color: 'from-sky-500/15 to-cyan-600/10',      textColor: 'text-sky-400'    },
+  { key: 'Technology Systems',   icon: 'fa-microchip',  color: 'from-emerald-500/15 to-green-600/10', textColor: 'text-emerald-400'},
+  { key: 'Strategy Market',      icon: 'fa-chart-line', color: 'from-amber-500/15 to-orange-600/10',  textColor: 'text-amber-400'  },
+];
+
+// Normalize the loose skill keys coming from the orchestrator enrichment
+function resolveSkillScore(scores: Record<string, number | null>, configKey: string): number | null {
+  const variants: string[] = [
+    configKey,
+    configKey.toLowerCase(),
+    configKey.toLowerCase().replace(/\s+/g, '_'),
+    configKey.toLowerCase().replace(/\s+/g, '-'),
+    configKey.replace(/ /g, ''),
+  ];
+  for (const v of variants) {
+    if (scores[v] != null) return scores[v];
+  }
+  // partial match
+  const lower = configKey.toLowerCase();
+  for (const [k, v] of Object.entries(scores)) {
+    if (k.toLowerCase().includes(lower.split(' ')[0])) return v;
+  }
+  return null;
+}
+
+interface ReportPreviewModalProps {
+  report: Report;
+  onClose: () => void;
+}
+
+function ReportPreviewModal({ report, onClose }: ReportPreviewModalProps) {
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [onClose]);
+
+  const rawScore     = report.confidenceScore;
+  const overallScore = rawScore != null ? rawScore * 10 : null;
+  const tag          = (report.tags ?? [])[0] ?? (report.status === 'completed' ? 'Completed' : '—');
+  const scores       = report.macroSkillScores ?? {};
+  const scoreColor   = overallScore == null ? 'text-muted' : overallScore >= 9 ? 'text-success' : overallScore >= 7.5 ? 'text-warning' : 'text-error';
+
+  // Index structured skills by label for quick lookup
+  const structuredByLabel = Object.fromEntries(
+    (report.structuredSkills ?? []).map(s => [s.skill_label, s])
+  );
+
+  const market: Record<string, string> = {
+    Genre:      report.genre,
+    Platforms:  report.platformNames.length ? String(report.platformNames.length) : '—',
+    Year:       report.year ? String(report.year) : '—',
+    Status:     report.status === 'completed' ? 'Done' : report.status,
+  };
+
+  return (
+    <div
+      ref={overlayRef}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+      onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
+    >
+      <div className="bg-surface border border-border rounded-2xl w-full max-w-2xl shadow-modal max-h-[90vh] overflow-y-auto scrollbar-hide">
+
+        {/* ── Cover header ── */}
+        <div className="relative h-44 bg-elevated overflow-hidden rounded-t-2xl">
+          <img
+            src={report.image}
+            alt={report.title}
+            className="w-full h-full object-cover"
+            onError={e => { (e.target as HTMLImageElement).src = `https://picsum.photos/seed/${report.id}/600/300`; }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/30 to-transparent" />
+          <button
+            onClick={onClose}
+            className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/60 flex items-center justify-center text-white hover:bg-black/80 transition-colors"
+          >
+            <i className="fas fa-times text-xs" />
+          </button>
+          <div className="absolute bottom-4 left-5 right-5">
+            <div className="flex items-end gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-accent font-medium uppercase tracking-wider mb-0.5">{report.genre}</p>
+                <h2 className="text-xl font-bold text-primary leading-tight truncate">{report.title}</h2>
+                <p className="text-xs text-muted">{report.developer} · {report.year || '—'}</p>
+              </div>
+              {overallScore != null && (
+                <div className="text-right flex-shrink-0">
+                  <p className={`text-3xl font-black ${scoreColor}`}>{overallScore.toFixed(1)}</p>
+                  <p className="text-xs text-muted truncate max-w-[100px]">{tag}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Body ── */}
+        <div className="p-5 space-y-5">
+
+          {/* Macro-Skill Analysis */}
+          <div>
+            <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Macro-Skill Analysis</p>
+            <div className="grid grid-cols-2 gap-3">
+              {SKILL_CONFIG.map((skill) => {
+                const structured = structuredByLabel[skill.key];
+                const scoreRaw = structured?.confidence_raw ?? resolveSkillScore(scores, skill.key);
+                const scoreDisplay = structured?.score ?? (scoreRaw != null ? scoreRaw * 10 : null);
+                const barWidth = scoreRaw != null ? scoreRaw * 100 : (scoreDisplay != null ? scoreDisplay * 10 : null);
+                const summary = structured?.summary ?? '';
+                const strengths = structured?.strengths ?? [];
+                const weaknesses = structured?.weaknesses ?? [];
+                const hasDetail = summary || strengths.length > 0 || weaknesses.length > 0;
+
+                return (
+                  <div key={skill.key} className={`rounded-xl p-3 bg-gradient-to-br ${skill.color} border border-border flex flex-col gap-2`}>
+                    {/* Header row */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <i className={`fas ${skill.icon} text-xs ${skill.textColor} flex-shrink-0`} />
+                        <p className="text-xs font-semibold text-primary truncate">{skill.key}</p>
+                      </div>
+                      <span className={`text-sm font-black ${skill.textColor} flex-shrink-0 ml-1`}>
+                        {scoreDisplay != null ? scoreDisplay.toFixed(1) : '—'}
+                      </span>
+                    </div>
+
+                    {/* Score bar */}
+                    {barWidth != null ? (
+                      <div className="h-1 bg-black/20 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${skill.textColor.replace('text-', 'bg-')}`} style={{ width: `${barWidth}%` }} />
+                      </div>
+                    ) : null}
+
+                    {/* LLM-generated detail */}
+                    {hasDetail ? (
+                      <div className="space-y-1.5 mt-0.5">
+                        {summary && (
+                          <p className="text-[10px] text-muted leading-snug line-clamp-2">{summary}</p>
+                        )}
+                        {strengths.slice(0, 2).map((s, i) => (
+                          <p key={i} className="text-[10px] text-success/80 flex gap-1 leading-snug">
+                            <span className="flex-shrink-0">+</span><span className="line-clamp-1">{s}</span>
+                          </p>
+                        ))}
+                        {weaknesses.slice(0, 1).map((w, i) => (
+                          <p key={i} className="text-[10px] text-gray-200 text-error/70 flex gap-1 leading-snug">
+                            <span className="flex-shrink-0">−</span><span className="line-clamp-1">{w}</span>
+                          </p>
+                        ))}
+                      </div>
+                    ) : (
+                      !barWidth && <p className="text-[10px] text-muted/60 italic">No data yet</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Tags */}
+          {(report.tags ?? []).length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">Tags</p>
+              <div className="flex flex-wrap gap-1.5">
+                {(report.tags ?? []).map(t => (
+                  <span key={t} className="text-xs px-2.5 py-1 rounded-full bg-accent/10 text-accent border border-accent/20">{t}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Market Intelligence */}
+          <div>
+            <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Market Intelligence</p>
+            <div className="grid grid-cols-4 gap-2">
+              {Object.entries(market).map(([key, val]) => (
+                <div key={key} className="bg-elevated rounded-xl p-3 text-center">
+                  <p className="text-sm font-bold text-primary leading-tight truncate">{val}</p>
+                  <p className="text-xs text-muted mt-0.5">{key}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2 pt-1 border-t border-border">
+            <button className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-accent text-white text-xs font-semibold hover:bg-accent-dark transition-colors">
+              <i className="fas fa-file-alt" /> Full Report
+            </button>
+            <button className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-elevated text-primary-muted text-xs font-semibold hover:text-primary transition-colors border border-border">
+              <i className="fas fa-download" /> Export
+            </button>
+            <button
+              onClick={onClose}
+              className="flex items-center justify-center gap-1.5 py-2 px-4 rounded-lg bg-elevated text-muted text-xs hover:text-primary transition-colors border border-border"
+            >
+              Close
+            </button>
+          </div>
+
+          {/* Date */}
+          <p className="text-xs text-disabled flex items-center gap-1.5 -mt-2">
+            <i className="fas fa-calendar-alt text-[9px]" />
+            Generated {fmtDate(report.createdAt)}
+          </p>
+        </div>
+
       </div>
     </div>
   );
@@ -532,8 +755,9 @@ export function Dashboard() {
   const [facets, setFacets]                   = useState<ApiReportListResponse['facets'] | null>(null);
   const [isLoadingReports, setIsLoadingReports] = useState(false);
   const [isGenerating, setIsGenerating]       = useState(false);
-  const [showPipeline, setShowPipeline]       = useState(false);
+  const [showPipeline, setShowPipeline]         = useState(false);
   const [pipelineReportId, setPipelineReportId] = useState<string | null>(null);
+  const [previewReport, setPreviewReport]       = useState<Report | null>(null);
 
   async function loadReports() {
     setIsLoadingReports(true);
@@ -753,12 +977,16 @@ export function Dashboard() {
           ) : (
             <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
               {filteredReports.map((r) => (
-                <ReportCard key={r.id} report={r} onClick={() => {}} />
+                <ReportCard key={r.id} report={r} onClick={() => setPreviewReport(r)} />
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {previewReport && (
+        <ReportPreviewModal report={previewReport} onClose={() => setPreviewReport(null)} />
+      )}
 
       {showDisamb && (
         <DisambiguationModal query={pipelineTitle} candidates={disambCandidates} onClose={() => setShowDisamb(false)} onConfirm={handleDisambiguationConfirm} />

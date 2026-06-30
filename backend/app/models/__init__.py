@@ -64,6 +64,9 @@ class Report(BaseModel):
     tags: List[str]
     created_at: Any
     updated_at: Any
+    executive_summary: Optional[dict] = None
+    thematic_analysis: Optional[dict] = None
+    confidence_analysis: Optional[dict] = None
 
 class ReportListResponse(BaseModel):
     """Legacy report list response model."""
