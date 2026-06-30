@@ -1,4 +1,4 @@
-﻿"""
+"""
 Reports API endpoints for Phase 4 database integration.
 
 Provides endpoints for retrieving and managing analysis reports stored in the database.

@@ -88,7 +88,7 @@ Sticky topbar (`64px` height) with glassmorphism (`backdrop-blur: 20px`):
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  [▪] GetSmart    Reports  Pipeline  Templates  Docs   [🔍][🔔][👤] │
+│  [▪] GetSmart    Reports  Pipeline  Templates  Docs   [][][] │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -119,7 +119,7 @@ Triggered by clicking the profile trigger. Appears as a dropdown at `top: 64px`,
 
 ```
 ┌─────────────────────────────┐
-│  [👤] Alejandro L.          │
+│  [] Alejandro L.          │
 │      alejandro.l@globant.com │
 │  ┌─────────────────────────┐│
 │  │ Senior AI Engineer ·    ││
@@ -127,12 +127,12 @@ Triggered by clicking the profile trigger. Appears as a dropdown at `top: 64px`,
 │  └─────────────────────────┘│
 ├─────────────────────────────┤
 │  ✏️  Edit profile            │
-│  🛡️  Security & SSO          │
+│  ️  Security & SSO          │
 │  ⚙️  Preferences             │
-│  🔑  API Keys                │
+│    API Keys                │
 ├─────────────────────────────┤
 │  ❓  Help & Support          │
-│  🚪  Sign out (danger red)   │
+│    Sign out (danger red)   │
 └─────────────────────────────┘
 ```
 
@@ -183,7 +183,7 @@ Games with `status: 'processing'` appear in a dedicated section **above** the co
 ┌──────────────────────────────────────────────────────┐
 │ [thumbnail]  Title of Game                           │
 │  112×63px    Developer Name                          │
-│              📅 Jun 23, 2026                         │
+│               Jun 23, 2026                         │
 │              [Phase 2/4]  Consolidation              │
 │              ■■□□  (segmented bar)  45%              │
 │              ▓▓▓▓▓▓░░░░ (thin progress)              │
@@ -215,8 +215,8 @@ Games with `status: 'processing'` appear in a dedicated section **above** the co
 │  [Action RPG] ●              │
 │  Elden Ring                  │
 │  FromSoftware · 2022         │
-│  📅 Jun 10, 2026             │
-│  🖥️  🎮  🎮                  │
+│   Jun 10, 2026             │
+│  ️                      │
 └──────────────────────────────┘
 ```
 

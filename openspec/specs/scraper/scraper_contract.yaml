@@ -10,11 +10,11 @@ schema: spec-driven
 artifact:
   id: scraper_contract
   name: Scraper & Ingestion Contract
-  version: "1.1.0"
+  version: "2.0.0"
   author: GetSmart Team
   created_at: "2026-06-17"
-  updated_at: "2026-06-24"
-  status: draft
+  updated_at: "2026-06-30"
+  status: active
   description: |
     Defines the programmatic ingestion pipeline that extracts structured and
     semantic data for a confirmed game. Uses FastAPI with async/await and
@@ -93,28 +93,54 @@ architectural_decisions:
       - "In-memory cache lost on restart → Acceptable for Phase 1"
 
 # ============================================================
+# 0.5 ARCHITECTURE (DDD)
+# ============================================================
+architecture:
+  pattern: "Domain-Driven Design (DDD)"
+  layers:
+    presentation:
+      description: "API endpoints and routing"
+      files: ["api.py"]
+    application:
+      description: "Orchestration of use cases, Phase 1→3 pipeline logic"
+      files: [
+        "orchestrator.py", "ai_orchestrator.py", "ai_workers.py",
+        "master_assembler.py", "synthesizer.py", "pipeline_status.py"
+      ]
+    domain:
+      description: "Core business logic and scraper services per Macro-Skill"
+      files: [
+        "design_art_service.py", "user_experience_service.py",
+        "technology_systems_service.py", "strategy_market_service.py",
+        "models.py"
+      ]
+    infrastructure:
+      description: "External API clients and model integration"
+      files: ["llm_client.py", "rawg_client.py", "steam_client.py", "tavily_client.py"]
+
+# ============================================================
 # 1. FLOW DIAGRAM (Mermaid)
 # ============================================================
 flow:
   mermaid: |
     flowchart TD
-      A[confirmed_game input] --> B[FastAPI POST /scrape]
-      B --> C{BackgroundTasks}
+      A[confirmed_game input] --> B[FastAPI POST /scraper/analyze]
+      B --> C{Orchestrator}
       C --> D[asyncio.gather 4 scrapers]
-      D --> E[Scraper 1: Design & Art]
-      D --> F[Scraper 2: User Experience]
-      D --> G[Scraper 3: Technology & Systems]
-      D --> H[Scraper 4: Strategy & Market]
+      D --> E[Scraper 1: DesignArtService]
+      D --> F[Scraper 2: UserExperienceService]
+      D --> G[Scraper 3: TechnologySystemsService]
+      D --> H[Scraper 4: StrategyMarketService]
       E --> I[context_design_art.json]
       F --> J[context_user_experience.json]
       G --> K[context_technology_systems.json]
       H --> L[context_strategy_market.json]
-      I --> M[Consolidate Master-JSON]
+      I --> M[MasterAssembler Consolidate]
       J --> M
       K --> M
       L --> M
       M --> N[master_context.json]
-      N --> O[POST /webhook to Phase 3]
+      N --> O[AI Orchestrator (Phase 3)]
 
 # ============================================================
 # 2. INPUT CONTRACT
@@ -199,7 +225,7 @@ scrapers:
   scraper_1_design_art:
     macro_skill: "Design and Art"
     scraper_id: "scraper_design_art"
-    execution: "async def scrape_design_art(game_metadata: dict) -> dict"
+    execution: "DesignArtService.extract_design_art_context()"
     description: |
       Extracts gameplay, level design, narrative, art direction, and sound design
       data. Combines hard data from APIs with semantic searches specialized in
@@ -328,7 +354,7 @@ scrapers:
   scraper_2_user_experience:
     macro_skill: "User Experience"
     scraper_id: "scraper_user_experience"
-    execution: "async def scrape_user_experience(game_metadata: dict) -> dict"
+    execution: "UserExperienceService.extract_user_experience_context()"
     description: |
       Extracts UI/UX, accessibility, and localization data. Focuses on player
       experience from interface to inclusion of accessibility options.
@@ -430,7 +456,7 @@ scrapers:
   scraper_3_technology_systems:
     macro_skill: "Technology and Systems"
     scraper_id: "scraper_technology_systems"
-    execution: "async def scrape_technology_systems(game_metadata: dict) -> dict"
+    execution: "TechnologySystemsService.extract_technology_systems_context()"
     description: |
       Extracts technology/performance, multiplayer/social, and platforms/distribution
       data. Focuses on game architecture, engines used, performance, and multiplayer
@@ -1329,3 +1355,28 @@ security:
     scrub_user_names: true
     scrub_email_addresses: true
     scrub_ips: true
+
+# ============================================================
+# 12. API ENDPOINTS (Scraper Module)
+# ============================================================
+endpoints:
+  - path: POST /scraper/scrape
+    summary: "Legacy Phase 1 scraper endpoint (async)"
+    status: "legacy/deprecated"
+
+  - path: POST /scraper/analyze
+    summary: "Direct Phase 1+2 execution returning scraped mini contexts"
+    description: "Bypasses the DB-backed pipeline and returns raw scraping results directly."
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+            required: ["game_id", "name", "release_year", "rawg_id"]
+    responses:
+      "200":
+        description: "Scraping results with mini contexts"
+
+  - path: GET /scraper/api/v1/reports/{report_id}/status
+    summary: "Check scraper pipeline status"
+    status: "legacy/deprecated"

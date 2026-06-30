@@ -150,17 +150,17 @@ Modal opens when user submits a search query (Enter key or Search button click).
 │  We found 3 matches. Please select the correct game:  │
 │                                                         │
 │  ┌─────────────────────────────────────────────────┐   │
-│  │  [🎮] Elden Ring                                │   │
+│  │  [] Elden Ring                                │   │
 │  │      FromSoftware · 2022 · Action RPG           │   │
 │  │      igdb: 119388                    ○          │   │
 │  └─────────────────────────────────────────────────┘   │
 │  ┌─────────────────────────────────────────────────┐   │
-│  │  [🧩] Elden Ring: Shadow of the Erdtree       │   │
+│  │  [] Elden Ring: Shadow of the Erdtree       │   │
 │  │      FromSoftware · 2024 · DLC · Action RPG     │   │
 │  │      igdb: 284834                    ○          │   │
 │  └─────────────────────────────────────────────────┘   │
 │  ┌─────────────────────────────────────────────────┐   │
-│  │  [🌙] Elden Ring Nightreign                     │   │
+│  │  [] Elden Ring Nightreign                     │   │
 │  │      FromSoftware · 2025 · Spin-off            │   │
 │  │      igdb: 342156                    ○          │   │
 │  └─────────────────────────────────────────────────┘   │

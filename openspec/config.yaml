@@ -12,7 +12,8 @@ project:
   methodology: "Spec Driven Development (SDD)"
   spec_format: "OpenSpec"
   created_at: "2026-06-17"
-  status: "draft"
+  updated_at: "2026-06-30"
+  status: "active"
 
   objectives:
     - "Generate structured, professional-grade game intelligence reports"
@@ -34,11 +35,10 @@ project_structure:
     openspec: "openspec/"
     frontend: "frontend/"
     backend: "backend/"
-    infra: "infra/"
-    scripts: "scripts/"
   notes:
     - "Top-level README and .gitignore live at repo root (outside openspec/)."
     - "Keep OpenSpec artifacts inside `openspec/`."
+    - "infra/ and scripts/ directories are planned but not yet created."
 
 # ============================================================
 # Tech Stack
@@ -57,27 +57,29 @@ stack:
   backend:
     framework: "FastAPI 0.110+"
     language: "Python 3.11+"
-    task_queue: "Celery 5.3+"
-    broker: "Redis 7+"
-    result_backend: "Redis 7+"
-    orm: "SQLAlchemy 2.0+"
+    async_runtime: "asyncio (stdlib) — tasks via asyncio.create_task"
+    cache: "Redis 7+ (in-memory cache via CacheManager)"
+    orm: "SQLAlchemy 2.0+ (async with asyncpg)"
     database: "PostgreSQL 16+"
+    http_client: "httpx (async)"
 
   ai_models:
     provider: "Google"
+    sdk: "google.genai (planned/current) and google.generativeai (legacy/deprecated, with HTTP fallback via GeminiClient). Ambos deben documentarse."
+    retry_policy:
+      max_attempts: 3
+      backoff: "exponential (1s–30s)"
     models:
       - name: "gemini-2.5-flash"
-        purpose: "Parallel Macro-Skill processing (Phase 3)"
+        purpose: "Parallel Macro-Skill processing (Phase 3) — default model for all 4 skills"
         context_window: "2M tokens"
         temperature: 0.3
-      - name: "gemini-2.5-pro"
-        purpose: "Synthesis and final editing (Phase 4)"
-        context_window: "2M tokens"
-        temperature: 0.2
-      - name: "gemini-gema-4"
-        purpose: "Support tasks and quick chat responses"
+        max_output_tokens: 6000
+        response_format: "application/json"
+      - name: "gemini-1.5-flash"
+        purpose: "Synthesis and final editing (Phase 4) — SYNTHESIS_MODEL constant"
         context_window: "1M tokens"
-        temperature: 0.4
+        temperature: 0.2
 
   data_sources:
     structured:
@@ -106,6 +108,7 @@ stack:
         endpoint: "https://api.twitch.tv/helix"
         auth: "OAuth2"
         purpose: "Viewership, streamer data (Phase 1)"
+        status: "planned — not yet implemented in scraper infrastructure"
 
   outputs:
     - format: "Markdown"
@@ -113,10 +116,9 @@ stack:
       template: "templates/report_markdown.md"
       purpose: "UI presentation and quick reading"
     - format: "PDF"
-      generator: "WeasyPrint"
-      template: "templates/report_pdf.html"
-      css: "templates/styles/report.css"
+      generator: "HTML template (pdf_html_content column in reports table)"
       purpose: "Formal executive deliverables"
+      status: "planned — HTML content generated, actual PDF rendering not yet integrated"
     - format: "JSON"
       generator: "Pydantic"
       schema: "specs/schemas/final_report_schema.json"
@@ -161,7 +163,7 @@ pipeline:
       name: "parallel_analysis"
       display_name: "Phase 3 · Parallel Analysis"
       layer: "backend"
-      description: "Distribute Master-JSON via Celery to 4 Macro-Skills powered by Gemini"
+      description: "Distribute Mini-Contexts via asyncio.gather to 4 Macro-Skills powered by Gemini"
       artifacts:
         - "specs/macro_skills/design_art_skill.yaml"
         - "specs/macro_skills/ux_skill.yaml"
@@ -170,11 +172,20 @@ pipeline:
 
     - id: 4
       name: "synthesis"
-      display_name: "Phase 4 · Synthesis"
+      display_name: "Phase 4 · Synthesis & Storage"
       layer: "backend"
-      description: "Unify results using Gemini as main editor → Markdown, PDF, JSON"
+      description: "Unify results using DeterministicSynthesizer → Markdown, JSON, DB storage"
       artifacts:
         - "specs/synthesis/synthesis_skill.yaml"
+        - "specs/pipeline/pipeline_contract.yaml"
+        - "specs/schemas/database_schema_contract.yaml"
+
+  phase_weights:
+    description: "Progress contribution of each phase to overall pipeline progress"
+    scraping: 0.30
+    analysis: 0.40
+    synthesis: 0.20
+    storage: 0.10
 
 # ============================================================
 # Analytical Framework (17 Categories → 4 Macro-Skills)
@@ -242,10 +253,10 @@ design_system:
       hover: "#222222"
       border: "#2A2A2A"
       border_hover: "#3A3A3A"
-      accent: "#3B82F6"
-      accent_light: "#60A5FA"
-      accent_dark: "#2563EB"
-      accent_glow: "rgba(59,130,246,0.15)"
+      accent: "#6366F1"
+      accent_light: "#818CF8"
+      accent_dark: "#4F46E5"
+      accent_glow: "rgba(99,102,241,0.15)"
       secondary: "#8B5CF6"
       secondary_light: "#A78BFA"
       text_primary: "#F5F5F5"
@@ -281,8 +292,8 @@ design_system:
       full: "9999px"
     effects:
       glass: "backdrop-blur(20px)"
-      glow_border: "0 0 0 1px #2A2A2A, 0 0 20px rgba(59,130,246,0.08)"
-      glow_border_hover: "0 0 0 1px #3B82F6, 0 0 30px rgba(59,130,246,0.15)"
+      glow_border: "0 0 0 1px #2A2A2A, 0 0 20px rgba(99,102,241,0.08)"
+      glow_border_hover: "0 0 0 1px #6366F1, 0 0 30px rgba(99,102,241,0.15)"
       shadow_card: "0 4px 24px rgba(0,0,0,0.4)"
       shadow_modal: "0 24px 48px rgba(0,0,0,0.6)"
     animations:
@@ -323,37 +334,50 @@ definition_of_done:
 environment:
   required:
     - name: "GEMINI_API_KEY"
-      description: "Google Gemini API key"
+      description: "Google Gemini API key for AI model calls"
     - name: "IGDB_CLIENT_ID"
-      description: "Twitch Client ID for IGDB"
+      description: "Twitch Client ID for IGDB (Phase 0 disambiguation)"
     - name: "IGDB_CLIENT_SECRET"
-      description: "Twitch Client Secret for IGDB"
+      description: "Twitch Client Secret for IGDB (Phase 0 disambiguation)"
     - name: "RAWG_API_KEY"
-      description: "RAWG API key"
+      description: "RAWG API key (Phase 0 disambiguation)"
+    - name: "STEAM_API_KEY"
+      description: "Steam Web API key (Phase 1 scraping — achievements, player counts)"
     - name: "TAVILY_API_KEY"
-      description: "Tavily API key"
+      description: "Tavily API key (Phase 1 semantic web searches)"
     - name: "REDIS_URL"
-      description: "Redis connection URL"
-      default: "redis://localhost:6379/0"
+      description: "Redis connection URL for in-memory cache (CacheManager)"
+      default: "redis://localhost:6379"
     - name: "DATABASE_URL"
-      description: "PostgreSQL connection URL"
-    - name: "JWT_SECRET_KEY"
-      description: "RS256 private key for JWT signing"
+      description: "PostgreSQL connection URL (asyncpg driver auto-detected)"
+    - name: "JWT_SECRET"
+      description: "HS256 secret key for JWT signing (symmetric)"
     - name: "GOOGLE_CLIENT_ID"
-      description: "Google OAuth2 Client ID"
+      description: "Google OAuth2 Client ID (optional SSO)"
     - name: "MICROSOFT_CLIENT_ID"
-      description: "Microsoft OAuth2 Client ID"
+      description: "Microsoft OAuth2 Client ID (optional SSO)"
     - name: "OKTA_DOMAIN"
-      description: "Okta organization domain"
+      description: "Okta organization domain (optional SSO)"
 
   optional:
+    - name: "DEBUG"
+      description: "Enable debug mode and SQL echo"
+      default: "false"
     - name: "LOG_LEVEL"
       description: "Application log level"
       default: "INFO"
       options: ["DEBUG", "INFO", "WARNING", "ERROR"]
-    - name: "MAX_CONCURRENT_TASKS"
-      description: "Maximum Celery concurrent tasks"
-      default: "4"
+    - name: "FRONTEND_URL"
+      description: "Frontend URL for CORS origins"
+      default: "http://localhost:5173"
+    - name: "GOOGLE_CLIENT_SECRET"
+      description: "Google OAuth2 Client Secret"
+    - name: "MICROSOFT_CLIENT_SECRET"
+      description: "Microsoft OAuth2 Client Secret"
+    - name: "OKTA_CLIENT_ID"
+      description: "Okta Client ID"
+    - name: "OKTA_CLIENT_SECRET"
+      description: "Okta Client Secret"
     - name: "REQUEST_TIMEOUT"
       description: "HTTP request timeout in seconds"
       default: "30"

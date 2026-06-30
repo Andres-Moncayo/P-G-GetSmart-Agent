@@ -237,6 +237,10 @@ async getReportStatus(reportId: string) {
       return '';
     }
   }
+
+  async deleteReport(reportId: string): Promise<void> {
+    await this.client.delete(`/api/v1/reports/${reportId}`);
+  }
 }
 
 export const apiClient = new ApiClient();

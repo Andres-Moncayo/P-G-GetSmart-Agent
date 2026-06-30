@@ -197,7 +197,7 @@ You must return a strictly valid JSON object matching the requested schema. No m
 
 ---
 
-## 📊 Game Overview
+##  Game Overview
 
 **Game:** {game_info.get('game_name', 'Unknown')}  
 **Analysis ID:** {game_info.get('game_id', 'Unknown')}  
@@ -206,7 +206,7 @@ You must return a strictly valid JSON object matching the requested schema. No m
 
 ---
 
-## 🎨 Design & Art Analysis
+##  Design & Art Analysis
 
 """
         
@@ -232,7 +232,7 @@ You must return a strictly valid JSON object matching the requested schema. No m
         confidence_info = self._extract_confidence_info(analyses)
         
         report += f"""
-## 📋 Analysis Summary
+##  Analysis Summary
 
 **Overall Confidence:** {confidence_info['average_confidence']:.1%}  
 **Analyses Completed:** {len(analyses)}  
@@ -251,7 +251,7 @@ You must return a strictly valid JSON object matching the requested schema. No m
 
 ---
 
-## 📊 Confidence Distribution
+##  Confidence Distribution
 
 - **High Confidence (>80%):** {confidence_info['confidence_distribution']['high']} analyses
 - **Medium Confidence (60-80%):** {confidence_info['confidence_distribution']['medium']} analyses  

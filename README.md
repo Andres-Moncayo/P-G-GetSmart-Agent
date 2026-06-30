@@ -1,4 +1,4 @@
-# GetSmart v3.0
+# GetSmart v3.3.1
 
 Deterministic Parallel Analysis Pipeline for comprehensive game intelligence reports powered by Spec-Driven Development (SDD).
 
@@ -160,7 +160,7 @@ This project follows an AI-assisted Spec-Driven Development (SDD) approach that 
 1. **Environment Setup**
    ```bash
    git clone <repository>
-   npm npm install -g @fission-ai/openspec@latest
+   npm install -g @fission-ai/openspec@latest
    openspec validate --all
    ```
 
@@ -306,36 +306,36 @@ frontend/
 
 ```
 openspec/
-├── changes/                      # Development change tracking
-│   ├── register-open-specs/      # OpenSpec registration change
-│   └── optimize-spec-detection/ # Spec detection optimization change
+├── changes/                      # Development change tracking (empty in stable)
 ├── specs/
 │   ├── macro_skills/            # Macro-skill specifications
 │   │   ├── ux_skill.yaml        # UX analysis contract
 │   │   ├── ux_skill.md          # UX analysis documentation
 │   │   ├── design_art_skill.yaml # Design analysis contract
-│   │   ├── design_art_skill.md # Design analysis documentation
+│   │   ├── design_art_skill.md  # Design analysis documentation
 │   │   ├── tech_systems_skill.yaml # Technical analysis contract
 │   │   ├── tech_systems_skill.md # Technical analysis documentation
 │   │   ├── strategy_market_skill.yaml # Strategy analysis contract
 │   │   ├── strategy_market_skill.md # Strategy analysis documentation
 │   │   └── README.md            # Macro-skill overview
-│   ├── scraper/                  # Data collection specifications
+│   ├── pipeline/                # Pipeline management specifications
+│   ├── schemas/                 # Data schemas and definitions
+│   ├── scraper/                 # Data collection specifications
 │   │   ├── master_json_schema.yaml # Master data structure
 │   │   ├── data_crud_contract.yaml # Data operations contract
 │   │   ├── pre_scrap_contract.yaml # Pre-scraping contract
 │   │   ├── scraper_contract.yaml   # Scraping engine contract
 │   │   └── json_schema.md          # JSON schema documentation
-│   ├── synthesis/                # Synthesis specifications
-│   │   ├── synthesis_skill.yaml   # Synthesis engine contract
-│   │   └── synthesis_skill.md     # Synthesis engine documentation
-│   ├── ui_and_login/             # User interface specifications
+│   ├── synthesis/               # Synthesis specifications
+│   │   ├── synthesis_skill.yaml # Synthesis engine contract
+│   │   └── synthesis_skill.md   # Synthesis engine documentation
+│   ├── ui_and_login/            # User interface specifications
 │   │   ├── ui_login_contract.yaml # UI login contract
 │   │   └── ui_login_contract.md  # UI login documentation
-│   ├── root-spec.yaml            # Root specification
-│   ├── spec.yaml                 # Main specification
-│   └── spec-driven.yaml          # Spec-driven workflow configuration
-└── config.yaml                    # OpenSpec project configuration
+│   ├── root-spec.yaml           # Root specification
+│   ├── spec.yaml                # Main specification
+│   └── spec-driven.yaml         # Spec-driven workflow configuration
+└── config.yaml                  # OpenSpec project configuration
 ```
 
 ---
@@ -456,8 +456,8 @@ Once the backend is running, access:
 
 ## Project Status
 
-**Current Version**: 3.0.0  
-**Development Phase**: Alpha - Core Architecture Complete  
+**Current Version**: 3.3.1  
+**Development Phase**: Beta Estable - Demo Estable  
 **OpenSpec Validation**: All contracts verified and compliant  
 **AI Workflow**: Ready for agent-assisted development  
 

@@ -77,6 +77,46 @@ function FilterCheckbox({ label, count, checked, onChange }: FilterCheckboxProps
   );
 }
 
+// ─── FilterSection ────────────────────────────────────────────────────────────
+
+interface FilterSectionProps {
+  title: string;
+  items: { value: string; count?: number }[];
+  selected: string[];
+  onChange: (value: string) => void;
+}
+function FilterSection({ title, items, selected, onChange }: FilterSectionProps) {
+  const [expanded, setExpanded] = useState(false);
+  
+  if (items.length === 0) return null;
+  
+  const visibleItems = expanded ? items : items.slice(0, 3);
+  const hasMore = items.length > 3;
+
+  return (
+    <div>
+      <p className="text-xs font-semibold text-primary mb-2">{title}</p>
+      {visibleItems.map((f) => (
+        <FilterCheckbox 
+          key={f.value} 
+          label={f.value} 
+          count={f.count}
+          checked={selected.includes(f.value)}
+          onChange={() => onChange(f.value)} 
+        />
+      ))}
+      {hasMore && (
+        <button 
+          onClick={() => setExpanded(!expanded)} 
+          className="text-xs text-muted hover:text-accent mt-1 flex items-center gap-1.5 transition-colors"
+        >
+          {expanded ? <><i className="fas fa-chevron-up text-[10px]" /> Show less</> : <><i className="fas fa-chevron-down text-[10px]" /> Show {items.length - 3} more</>}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ─── DateRadio ────────────────────────────────────────────────────────────────
 
 interface DateRadioProps { label: string; selected: boolean; onChange: () => void; }
@@ -98,8 +138,8 @@ function DateRadio({ label, selected, onChange }: DateRadioProps) {
 
 const PHASE_NAMES = ['Ingestion', 'Consolidation', 'Analysis', 'Synthesis'];
 
-interface InPhaseCardProps { report: Report; onClick: () => void; }
-function InPhaseCard({ report, onClick }: InPhaseCardProps) {
+interface InPhaseCardProps { report: Report; onClick: () => void; onDelete: (report: Report) => void; }
+function InPhaseCard({ report, onClick, onDelete }: InPhaseCardProps) {
   const m = report.time.match(/Phase (\d+)\/(\d+)/);
   const current = m ? parseInt(m[1]) : 1;
   const total   = m ? parseInt(m[2]) : 4;
@@ -108,7 +148,7 @@ function InPhaseCard({ report, onClick }: InPhaseCardProps) {
   return (
     <div
       onClick={onClick}
-      className="glow-border bg-surface rounded-xl overflow-hidden cursor-pointer hover:-translate-y-0.5 transition-all duration-200 flex"
+      className="glow-border bg-surface rounded-xl overflow-hidden cursor-pointer hover:-translate-y-0.5 transition-all duration-200 flex group relative"
     >
       {/* Thumbnail */}
       <div className="w-28 flex-shrink-0 relative">
@@ -119,6 +159,17 @@ function InPhaseCard({ report, onClick }: InPhaseCardProps) {
           onError={(e) => { (e.target as HTMLImageElement).src = `https://picsum.photos/seed/${report.id}/200/130`; }}
         />
         <div className="absolute inset-0 bg-gradient-to-r from-transparent to-surface/90" />
+        
+        <button 
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(report);
+          }}
+          className="absolute top-2 left-2 flex items-center justify-center w-6 h-6 rounded-full bg-red-500/80 hover:bg-red-600 text-white transition-colors z-10 opacity-0 group-hover:opacity-100"
+          title="Cancel Pipeline"
+        >
+          <i className="fas fa-times text-[10px]" />
+        </button>
       </div>
 
       {/* Info */}
@@ -170,8 +221,8 @@ function InPhaseCard({ report, onClick }: InPhaseCardProps) {
 
 // ─── InPhaseSection ───────────────────────────────────────────────────────────
 
-interface InPhaseSectionProps { reports: Report[]; onClickReport: (id: string) => void; }
-function InPhaseSection({ reports, onClickReport }: InPhaseSectionProps) {
+interface InPhaseSectionProps { reports: Report[]; onClickReport: (id: string, title: string) => void; onDeleteReport: (report: Report) => void; }
+function InPhaseSection({ reports, onClickReport, onDeleteReport }: InPhaseSectionProps) {
   if (reports.length === 0) return null;
   return (
     <div className="mb-5 pb-5 border-b border-border flex-shrink-0">
@@ -184,7 +235,7 @@ function InPhaseSection({ reports, onClickReport }: InPhaseSectionProps) {
       </div>
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
         {reports.map((r) => (
-          <InPhaseCard key={r.id} report={r} onClick={() => onClickReport(r.id)} />
+          <InPhaseCard key={r.id} report={r} onClick={() => onClickReport(r.id, r.title)} onDelete={onDeleteReport} />
         ))}
       </div>
     </div>
@@ -193,8 +244,8 @@ function InPhaseSection({ reports, onClickReport }: InPhaseSectionProps) {
 
 // ─── ReportCard ──────────────────────────────────────────────────────────────
 
-interface ReportCardProps { report: Report; onClick: () => void; }
-function ReportCard({ report, onClick }: ReportCardProps) {
+interface ReportCardProps { report: Report; onClick: () => void; onDelete: (report: Report) => void; onRefresh: (report: Report) => void; }
+function ReportCard({ report, onClick, onDelete, onRefresh }: ReportCardProps) {
   return (
     <div
       onClick={onClick}
@@ -209,6 +260,18 @@ function ReportCard({ report, onClick }: ReportCardProps) {
           onError={(e) => { (e.target as HTMLImageElement).src = `https://picsum.photos/seed/${report.id}/400/225`; }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+        
+        <button 
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(report);
+          }}
+          className="absolute top-2 left-2 flex items-center justify-center w-7 h-7 rounded-full bg-red-500/80 hover:bg-red-600 text-white transition-colors z-10 opacity-0 group-hover:opacity-100"
+          title="Delete Report"
+        >
+          <i className="fas fa-trash-alt text-[11px]" />
+        </button>
+
         <span className="absolute bottom-2 left-2 text-xs font-medium bg-black/60 text-primary-muted px-2 py-0.5 rounded-full backdrop-blur-sm">
           {report.genre}
         </span>
@@ -224,10 +287,22 @@ function ReportCard({ report, onClick }: ReportCardProps) {
           <i className="fas fa-calendar-alt text-[9px]" />
           {fmtDate(report.createdAt)}
         </p>
-        <div className="flex gap-1.5 mt-auto pt-2">
-          {report.platforms.slice(0, 4).map((icon) => (
-            <i key={icon} className={`${icon} text-xs text-disabled`} />
-          ))}
+        <div className="flex items-center justify-between mt-auto pt-2">
+          <div className="flex gap-1.5">
+            {report.platforms.slice(0, 4).map((icon) => (
+              <i key={icon} className={`${icon} text-xs text-disabled`} />
+            ))}
+          </div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onRefresh(report);
+            }}
+            className="flex items-center gap-1 text-[10px] uppercase font-bold text-accent hover:text-accent-light transition-colors"
+            title="Update Report"
+          >
+            <i className="fas fa-sync-alt" /> Update
+          </button>
         </div>
       </div>
     </div>
@@ -904,12 +979,74 @@ export function Dashboard() {
   const [showPipeline, setShowPipeline]         = useState(false);
   const [pipelineReportId, setPipelineReportId] = useState<string | null>(null);
   const [previewReport, setPreviewReport]       = useState<Report | null>(null);
+  const [reportToDelete, setReportToDelete]     = useState<Report | null>(null);
+  const [isDeleting, setIsDeleting]             = useState(false);
+  const [isUpdating, setIsUpdating]             = useState<string | null>(null);
+
+  async function handleRefreshReport(report: Report) {
+    if (isUpdating) return;
+    setIsUpdating(report.id);
+    try {
+      const res = await apiClient.searchGames(report.title, 5);
+      const candidates = res.candidates;
+      if (!candidates || candidates.length === 0) {
+        throw new Error("Game not found in external provider");
+      }
+      
+      let bestMatch = candidates[0];
+      for (const c of candidates) {
+        if (c.name.toLowerCase() === report.title.toLowerCase() || c.developer?.toLowerCase() === report.developer.toLowerCase()) {
+          bestMatch = c;
+          break;
+        }
+      }
+
+      // Do not delete old report yet. If canceled, user keeps the old one.
+      // If it completes successfully, loadReports() will automatically deduplicate and delete the older version.
+
+      const response = await apiClient.startPipeline(bestMatch.id);
+      
+      setPipelineReportId(response.report_id);
+      setPipelineTitle(bestMatch.name);
+      setShowPipeline(true);
+      await loadReports();
+    } catch (e) {
+      console.error(e);
+      alert('Failed to update report.');
+    } finally {
+      setIsUpdating(null);
+    }
+  }
 
   async function loadReports() {
     setIsLoadingReports(true);
     try {
       const data = await apiClient.getReports({ page: 1, page_size: 200 });
-      setReports(data.items.map(apiReportToLegacy));
+      const fetchedReports = data.items.map(apiReportToLegacy);
+      
+      // Smart Deduplication: Keep processing ones. For non-processing, keep only the latest per game.
+      const processing = fetchedReports.filter(r => r.status === 'processing');
+      const nonProcessing = fetchedReports.filter(r => r.status !== 'processing');
+      const nonProcessingDedup = new Map<string, Report>();
+      
+      for (const r of nonProcessing) {
+        const key = `${r.title.toLowerCase()}|${r.developer.toLowerCase()}`;
+        if (!nonProcessingDedup.has(key)) {
+          nonProcessingDedup.set(key, r);
+        } else {
+          const existing = nonProcessingDedup.get(key)!;
+          if (new Date(r.createdAt) > new Date(existing.createdAt)) {
+            nonProcessingDedup.set(key, r);
+            // Delete the older duplicate in background
+            apiClient.deleteReport(existing.id).catch(() => {});
+          } else {
+            // Delete this older duplicate in background
+            apiClient.deleteReport(r.id).catch(() => {});
+          }
+        }
+      }
+      
+      setReports([...processing, ...Array.from(nonProcessingDedup.values())]);
       setFacets(data.facets);
     } catch (error) {
       console.error('Failed to load reports:', error);
@@ -1055,32 +1192,26 @@ export function Dashboard() {
             )}
           </div>
 
-          <div>
-            <p className="text-xs font-semibold text-primary mb-2">Genre</p>
-            {(facets?.genre ?? []).map((f) => (
-              <FilterCheckbox key={f.value} label={f.value} count={f.count}
-                checked={genreFilters.includes(f.value)}
-                onChange={() => setGenreFilters(toggle(genreFilters, f.value))} />
-            ))}
-          </div>
+          <FilterSection
+            title="Genre"
+            items={facets?.genre ?? []}
+            selected={genreFilters}
+            onChange={(val) => setGenreFilters(toggle(genreFilters, val))}
+          />
 
-          <div>
-            <p className="text-xs font-semibold text-primary mb-2">Developer</p>
-            {(facets?.developer ?? []).map((f) => (
-              <FilterCheckbox key={f.value} label={f.value} count={f.count}
-                checked={devFilters.includes(f.value)}
-                onChange={() => setDevFilters(toggle(devFilters, f.value))} />
-            ))}
-          </div>
+          <FilterSection
+            title="Developer"
+            items={facets?.developer ?? []}
+            selected={devFilters}
+            onChange={(val) => setDevFilters(toggle(devFilters, val))}
+          />
 
-          <div>
-            <p className="text-xs font-semibold text-primary mb-2">Platform</p>
-            {(facets?.platform ?? []).map((f) => (
-              <FilterCheckbox key={f.value} label={f.value} count={f.count}
-                checked={platformFilters.includes(f.value)}
-                onChange={() => setPlatFilters(toggle(platformFilters, f.value))} />
-            ))}
-          </div>
+          <FilterSection
+            title="Platform"
+            items={facets?.platform ?? []}
+            selected={platformFilters}
+            onChange={(val) => setPlatFilters(toggle(platformFilters, val))}
+          />
 
           <div>
             <p className="text-xs font-semibold text-primary mb-2">Date Created</p>
@@ -1095,7 +1226,15 @@ export function Dashboard() {
         {/* Grid */}
         <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 flex flex-col min-h-0">
           {/* In Pipeline section */}
-          <InPhaseSection reports={inPhaseReports} onClickReport={() => {}} />
+          <InPhaseSection 
+            reports={inPhaseReports} 
+            onClickReport={(id, title) => {
+              setPipelineReportId(id);
+              setPipelineTitle(title);
+              setShowPipeline(true);
+            }} 
+            onDeleteReport={setReportToDelete} 
+          />
 
           {/* Completed header */}
           <div className="flex items-center justify-between mb-4 flex-shrink-0">
@@ -1123,7 +1262,15 @@ export function Dashboard() {
           ) : (
             <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
               {filteredReports.map((r) => (
-                <ReportCard key={r.id} report={r} onClick={() => setPreviewReport(r)} />
+                <div key={r.id} className="relative">
+                  {isUpdating === r.id && (
+                    <div className="absolute inset-0 z-50 bg-black/50 backdrop-blur-sm flex flex-col items-center justify-center rounded-xl">
+                      <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin mb-2" />
+                      <span className="text-white text-xs font-semibold">Updating...</span>
+                    </div>
+                  )}
+                  <ReportCard report={r} onClick={() => setPreviewReport(r)} onDelete={setReportToDelete} onRefresh={handleRefreshReport} />
+                </div>
               ))}
             </div>
           )}
@@ -1145,6 +1292,44 @@ export function Dashboard() {
           onClose={() => setShowPipeline(false)}
           onComplete={handlePipelineComplete}
         />
+      )}
+
+      {reportToDelete && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setReportToDelete(null)} />
+          <div className="relative bg-[#1E1E1E] border border-border rounded-xl p-6 w-full max-w-md shadow-2xl">
+            <h3 className="text-lg font-bold text-primary mb-2">Delete Report</h3>
+            <p className="text-muted text-sm mb-6">Are you sure you want to delete the report for <strong className="text-primary">{reportToDelete.title}</strong>? This action cannot be undone.</p>
+            <div className="flex gap-3 justify-end">
+              <button 
+                onClick={() => setReportToDelete(null)}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-lg bg-elevated text-primary-muted text-sm font-semibold hover:text-primary transition-colors border border-border disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={async () => {
+                  setIsDeleting(true);
+                  try {
+                    await apiClient.deleteReport(reportToDelete.id);
+                    await loadReports();
+                    setReportToDelete(null);
+                  } catch (e) {
+                    alert('Error deleting report');
+                  } finally {
+                    setIsDeleting(false);
+                  }
+                }}
+                disabled={isDeleting}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {isDeleting ? <i className="fas fa-spinner fa-spin" /> : <i className="fas fa-trash-alt" />}
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

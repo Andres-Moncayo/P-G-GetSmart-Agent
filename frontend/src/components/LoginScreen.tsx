@@ -22,10 +22,8 @@ export const LoginScreen: React.FC = () => {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-6">
-        <div className="relative">
-          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-accent to-secondary flex items-center justify-center shadow-lg shadow-accent/30">
-            <i className="fas fa-gamepad text-white text-3xl" />
-          </div>
+        <div className="relative flex items-center justify-center w-20 h-20">
+          <img src="/logo.svg" alt="GetSmart Logo" className="w-20 h-20 drop-shadow-[0_0_15px_rgba(99,102,241,0.4)] relative z-10" />
           <div className="absolute -inset-2 rounded-3xl border-2 border-accent/30 animate-ping" />
         </div>
         <div className="text-center">
@@ -59,10 +57,8 @@ export const LoginScreen: React.FC = () => {
       <div className="relative min-h-screen flex items-center justify-center px-4">
         <div className="w-full max-w-md">
           {/* Logo */}
-          <div className="flex justify-center mb-8">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-accent to-secondary flex items-center justify-center shadow-lg shadow-accent/30">
-              <i className="fas fa-gamepad text-white text-2xl" />
-            </div>
+          <div className="flex justify-center mb-6">
+            <img src="/logo.svg" alt="GetSmart Logo" className="w-20 h-20 drop-shadow-[0_0_15px_rgba(99,102,241,0.3)]" />
           </div>
 
           {/* Brand */}
