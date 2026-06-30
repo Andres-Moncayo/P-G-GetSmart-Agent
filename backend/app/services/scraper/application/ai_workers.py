@@ -110,8 +110,25 @@ def _validate_analysis_output(output: dict[str, Any], macro_skill: str) -> dict[
     return output
 
 
+def _generate_fallback_analysis(macro_skill: str) -> dict[str, Any]:
+    return {
+        "macro_skill": macro_skill,
+        "confidence_score": 0.0,
+        "key_findings": ["No se encontró información pública suficiente en las plataformas consultadas."],
+        "strengths": [],
+        "weaknesses": ["Juego con muy baja presencia pública, difícil de analizar sin datos."],
+        "risks": ["Falta de datos de mercado y usuarios puede indicar un juego muy de nicho o cancelado."],
+        "opportunities": [],
+        "evidence_count": 0,
+        "summary": "El agente no pudo encontrar suficiente información pública (Steam, RAWG, búsqueda web) para realizar un análisis detallado de esta sección.",
+    }
+
+
 async def analyze_design_art(mini_context: dict[str, Any], gemini_client: GeminiClient) -> dict[str, Any]:
     macro_skill = "design_art"
+    if mini_context.get("metadata", {}).get("evidence_count", 0) == 0:
+        return _generate_fallback_analysis(macro_skill)
+
     prompt = _build_prompt(macro_skill=macro_skill, mini_context=mini_context)
     output = await gemini_client.generate_structured_json(
         system_instruction=STRICT_SYSTEM_INSTRUCTION,
@@ -123,6 +140,9 @@ async def analyze_design_art(mini_context: dict[str, Any], gemini_client: Gemini
 
 async def analyze_user_experience(mini_context: dict[str, Any], gemini_client: GeminiClient) -> dict[str, Any]:
     macro_skill = "user_experience"
+    if mini_context.get("metadata", {}).get("evidence_count", 0) == 0:
+        return _generate_fallback_analysis(macro_skill)
+
     prompt = _build_prompt(macro_skill=macro_skill, mini_context=mini_context)
     output = await gemini_client.generate_structured_json(
         system_instruction=STRICT_SYSTEM_INSTRUCTION,
@@ -134,6 +154,9 @@ async def analyze_user_experience(mini_context: dict[str, Any], gemini_client: G
 
 async def analyze_technology_systems(mini_context: dict[str, Any], gemini_client: GeminiClient) -> dict[str, Any]:
     macro_skill = "technology_systems"
+    if mini_context.get("metadata", {}).get("evidence_count", 0) == 0:
+        return _generate_fallback_analysis(macro_skill)
+
     prompt = _build_prompt(macro_skill=macro_skill, mini_context=mini_context)
     output = await gemini_client.generate_structured_json(
         system_instruction=STRICT_SYSTEM_INSTRUCTION,
@@ -145,6 +168,9 @@ async def analyze_technology_systems(mini_context: dict[str, Any], gemini_client
 
 async def analyze_strategy_market(mini_context: dict[str, Any], gemini_client: GeminiClient) -> dict[str, Any]:
     macro_skill = "strategy_market"
+    if mini_context.get("metadata", {}).get("evidence_count", 0) == 0:
+        return _generate_fallback_analysis(macro_skill)
+
     prompt = _build_prompt(macro_skill=macro_skill, mini_context=mini_context)
     output = await gemini_client.generate_structured_json(
         system_instruction=STRICT_SYSTEM_INSTRUCTION,

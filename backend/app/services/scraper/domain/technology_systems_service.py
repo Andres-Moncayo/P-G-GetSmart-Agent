@@ -80,12 +80,15 @@ class TechnologySystemsService:
         aliases = aliases or []
         logger.info("Starting Technology Systems extraction for: %s", game_name)
 
+        failed_sources: list[str] = []
+
         # Collect hard data from APIs
         hard_data = await self._extract_hard_data(
             game_name=game_name,
             rawg_id=rawg_id,
             steam_app_id=steam_app_id,
             aliases=aliases,
+            failed_sources=failed_sources,
         )
 
         # Collect semantic data from web search
@@ -93,6 +96,7 @@ class TechnologySystemsService:
             game_name=game_name,
             aliases=aliases,
             hard_data=hard_data,
+            failed_sources=failed_sources,
         )
 
         # Calculate evidence counts and confidence
@@ -107,6 +111,7 @@ class TechnologySystemsService:
                 "confidence_score": confidence_score,
                 "data_sources": data_sources,
                 "evidence_count": evidence_count,
+                "failed_sources": list(set(failed_sources)),
             },
             "hard_data": hard_data,
             "semantic_data": semantic_data,
@@ -118,6 +123,7 @@ class TechnologySystemsService:
         rawg_id: int | None,
         steam_app_id: int | None,
         aliases: list[str],
+        failed_sources: list[str],
     ) -> dict[str, Any]:
         """Extract structured technical data from game APIs."""
         hard_data = {
@@ -148,6 +154,7 @@ class TechnologySystemsService:
                 logger.info("RAWG technical data extracted for %s", game_name)
             except Exception as e:
                 logger.warning("RAWG technical extraction failed for %s: %s", game_name, e)
+                failed_sources.append("rawg")
 
         # Steam extraction (critical for system requirements)
         if steam_app_id:
@@ -157,11 +164,12 @@ class TechnologySystemsService:
                 logger.info("Steam technical data extracted for %s", game_name)
             except Exception as e:
                 logger.warning("Steam technical extraction failed for %s: %s", game_name, e)
+                failed_sources.append("steam")
 
         return hard_data
 
     async def _extract_semantic_data(
-        self, game_name: str, aliases: list[str], hard_data: dict[str, Any]
+        self, game_name: str, aliases: list[str], hard_data: dict[str, Any], failed_sources: list[str]
     ) -> dict[str, Any]:
         """Extract semantic technical data from web searches."""
         semantic_data = {
@@ -185,7 +193,8 @@ class TechnologySystemsService:
                 engine_results.get("results", [])
             )
         except Exception as e:
-            logger.warning("Engine performance search failed for %s: %s", game_name, e)
+            logger.warning("Search failed for %s: %s", game_name, e)
+            failed_sources.append("tavily")
 
         # Technical Analysis Search
         tech_query = self._build_tech_analysis_query(game_name, platforms)
@@ -197,7 +206,8 @@ class TechnologySystemsService:
                 tech_results.get("results", [])
             )
         except Exception as e:
-            logger.warning("Technical analysis search failed for %s: %s", game_name, e)
+            logger.warning("Search failed for %s: %s", game_name, e)
+            failed_sources.append("tavily")
 
         # Performance Issues Search
         performance_query = self._build_performance_query(game_name)
@@ -209,7 +219,8 @@ class TechnologySystemsService:
                 performance_results.get("results", [])
             )
         except Exception as e:
-            logger.warning("Performance issues search failed for %s: %s", game_name, e)
+            logger.warning("Search failed for %s: %s", game_name, e)
+            failed_sources.append("tavily")
 
         # Network/Online Performance Search
         network_query = self._build_network_query(game_name)
@@ -221,7 +232,8 @@ class TechnologySystemsService:
                 network_results.get("results", [])
             )
         except Exception as e:
-            logger.warning("Network performance search failed for %s: %s", game_name, e)
+            logger.warning("Search failed for %s: %s", game_name, e)
+            failed_sources.append("tavily")
 
         # Developer Technical Interview Search
         dev_tech_query = self._build_dev_tech_query(game_name, game_engine)
@@ -233,7 +245,8 @@ class TechnologySystemsService:
                 dev_tech_results.get("results", [])
             )
         except Exception as e:
-            logger.warning("Developer tech search failed for %s: %s", game_name, e)
+            logger.warning("Search failed for %s: %s", game_name, e)
+            failed_sources.append("tavily")
 
         return semantic_data
 

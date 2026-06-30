@@ -78,12 +78,15 @@ class DesignArtService:
         aliases = aliases or []
         logger.info("Starting Design & Art extraction for: %s", game_name)
 
+        failed_sources: list[str] = []
+
         # Collect hard data from APIs
         hard_data = await self._extract_hard_data(
             game_name=game_name,
             rawg_id=rawg_id,
             steam_app_id=steam_app_id,
             aliases=aliases,
+            failed_sources=failed_sources,
         )
 
         # Collect semantic data from web search
@@ -91,6 +94,7 @@ class DesignArtService:
             game_name=game_name,
             aliases=aliases,
             hard_data=hard_data,
+            failed_sources=failed_sources,
         )
 
         # Calculate evidence counts and confidence
@@ -105,6 +109,7 @@ class DesignArtService:
                 "confidence_score": confidence_score,
                 "data_sources": data_sources,
                 "evidence_count": evidence_count,
+                "failed_sources": list(set(failed_sources)),
             },
             "hard_data": hard_data,
             "semantic_data": semantic_data,
@@ -116,6 +121,7 @@ class DesignArtService:
         rawg_id: int | None,
         steam_app_id: int | None,
         aliases: list[str],
+        failed_sources: list[str],
     ) -> dict[str, Any]:
         """Extract structured data from game APIs."""
         hard_data = {
@@ -140,6 +146,7 @@ class DesignArtService:
                 logger.info("RAWG data extracted for %s", game_name)
             except Exception as e:
                 logger.warning("RAWG extraction failed for %s: %s", game_name, e)
+                failed_sources.append("rawg")
 
         # Steam extraction
         if steam_app_id:
@@ -149,11 +156,12 @@ class DesignArtService:
                 logger.info("Steam data extracted for %s", game_name)
             except Exception as e:
                 logger.warning("Steam extraction failed for %s: %s", game_name, e)
+                failed_sources.append("steam")
 
         return hard_data
 
     async def _extract_semantic_data(
-        self, game_name: str, aliases: list[str], hard_data: dict[str, Any]
+        self, game_name: str, aliases: list[str], hard_data: dict[str, Any], failed_sources: list[str]
     ) -> dict[str, Any]:
         """Extract semantic data from web searches."""
         semantic_data = {
@@ -178,7 +186,8 @@ class DesignArtService:
                 gameplay_results.get("results", [])
             )
         except Exception as e:
-            logger.warning("Gameplay search failed for %s: %s", game_name, e)
+            logger.warning("Search failed for %s: %s", game_name, e)
+            failed_sources.append("tavily")
 
         # Art & Design Search
         art_query = self._build_art_query(game_name, genres)
@@ -190,7 +199,8 @@ class DesignArtService:
                 art_results.get("results", [])
             )
         except Exception as e:
-            logger.warning("Art design search failed for %s: %s", game_name, e)
+            logger.warning("Search failed for %s: %s", game_name, e)
+            failed_sources.append("tavily")
 
         # Story & Narrative Search
         story_query = self._build_story_query(game_name)
@@ -202,7 +212,8 @@ class DesignArtService:
                 story_results.get("results", [])
             )
         except Exception as e:
-            logger.warning("Story search failed for %s: %s", game_name, e)
+            logger.warning("Search failed for %s: %s", game_name, e)
+            failed_sources.append("tavily")
 
         # Visual Aesthetics Search
         visual_query = self._build_visual_query(game_name, hard_data.get("art_styles", []))
@@ -214,7 +225,8 @@ class DesignArtService:
                 visual_results.get("results", [])
             )
         except Exception as e:
-            logger.warning("Visual search failed for %s: %s", game_name, e)
+            logger.warning("Search failed for %s: %s", game_name, e)
+            failed_sources.append("tavily")
 
         # Design Philosophy Search
         design_query = self._build_design_philosophy_query(game_name)
@@ -226,7 +238,8 @@ class DesignArtService:
                 design_results.get("results", [])
             )
         except Exception as e:
-            logger.warning("Design philosophy search failed for %s: %s", game_name, e)
+            logger.warning("Search failed for %s: %s", game_name, e)
+            failed_sources.append("tavily")
 
         return semantic_data
 

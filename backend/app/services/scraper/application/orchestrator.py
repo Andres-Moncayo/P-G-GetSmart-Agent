@@ -524,7 +524,9 @@ async def run_complete_pipeline_with_db(game_payload: dict[str, Any], tracker_re
                     "skill_scores": skill_scores,
                     "structured_skills": structured_skills,
                 },
-                "strategic_recommendations": synth_meta,
+                "strategic_recommendations": synth_meta.get("strategic_recommendations", {}),
+                "cross_cutting_insights": synth_meta.get("cross_cutting_insights", {}),
+                "appendices": synth_meta.get("appendices", {}),
                 "risk_assessment": master_json.get("analysis_metadata", {}),
                 "confidence_analysis": {
                     "overall_confidence": synth_confidence,

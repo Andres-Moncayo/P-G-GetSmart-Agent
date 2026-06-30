@@ -50,6 +50,7 @@ class ReportRepository:
         master_json: Dict[str, Any],
         markdown_content: str,
         started_at: Optional[datetime] = None,
+        analysis_ids: Optional[Dict[str, str]] = None,
     ) -> Optional[Report]:
         """Update an existing report row with the final synthesis output."""
         meta = master_json.get("metadata", {})
@@ -80,6 +81,10 @@ class ReportRepository:
             "confidence_analysis_jsonb": master_json.get("confidence_analysis", {}),
             "report_metadata_jsonb": meta,
         }
+        
+        if analysis_ids:
+            update_data.update(analysis_ids)
+            
         return await self.update_report(report_id, update_data)
 
 

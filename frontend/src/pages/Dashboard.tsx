@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import ReactMarkdown from 'react-markdown';
+import html2pdf from 'html2pdf.js';
 import { DATE_FILTERS } from '../data/gameData';
+import { useAuthStore } from '../stores/authStore';
 import type { Report, GameCandidate, ApiReport, ApiReportListResponse, MacroSkillStructured } from '../types/game';
 import { apiClient } from '../services/api';
 
@@ -240,7 +243,6 @@ const SKILL_CONFIG = [
   { key: 'Strategy Market',      icon: 'fa-chart-line', color: 'from-amber-500/15 to-orange-600/10',  textColor: 'text-amber-400'  },
 ];
 
-// Normalize the loose skill keys coming from the orchestrator enrichment
 function resolveSkillScore(scores: Record<string, number | null>, configKey: string): number | null {
   const variants: string[] = [
     configKey,
@@ -260,6 +262,49 @@ function resolveSkillScore(scores: Record<string, number | null>, configKey: str
   return null;
 }
 
+function generateFallbackMarkdown(report: Report): string {
+  let md = `# Game Intelligence Report: ${report.title}\n\n`;
+  md += `**Genre:** ${report.genre}\n`;
+  md += `**Status:** ${report.status}\n`;
+  md += `**Confidence Score:** ${report.confidenceScore ? (report.confidenceScore * 100).toFixed(0) : 'N/A'}%\n\n`;
+
+  md += `## Executive Summary\n`;
+  if (report.executiveSummaryData && report.executiveSummaryData.summary) {
+    md += `${report.executiveSummaryData.summary}\n\n`;
+  } else {
+    md += `*No executive summary available.*\n\n`;
+  }
+
+  md += `## Skill Scores\n`;
+  if (report.macroSkillScores) {
+    for (const [skill, score] of Object.entries(report.macroSkillScores)) {
+      md += `- **${skill}**: ${score !== null ? (score * 100).toFixed(0) + '%' : 'N/A'}\n`;
+    }
+  }
+
+  md += `\n## Macro Skill Analyses\n`;
+  if (report.structuredSkills && report.structuredSkills.length > 0) {
+    for (const skill of report.structuredSkills) {
+      md += `\n### ${skill.skill_key.replace(/_/g, ' ').toUpperCase()}\n`;
+      if (skill.key_findings && skill.key_findings.length > 0) {
+        md += `**Key Findings:**\n${skill.key_findings.map(f => `- ${f}`).join('\n')}\n\n`;
+      }
+      if (skill.strengths && skill.strengths.length > 0) {
+        md += `**Strengths:**\n${skill.strengths.map(f => `- ${f}`).join('\n')}\n\n`;
+      }
+      if (skill.weaknesses && skill.weaknesses.length > 0) {
+        md += `**Weaknesses:**\n${skill.weaknesses.map(f => `- ${f}`).join('\n')}\n\n`;
+      }
+    }
+  } else {
+    md += `*No detailed skill analysis available.*\n`;
+  }
+
+  md += `\n\n---\n*Note: This report was automatically assembled from the raw analytical data because the final AI synthesis text was unavailable.*`;
+  
+  return md;
+}
+
 interface ReportPreviewModalProps {
   report: Report;
   onClose: () => void;
@@ -267,6 +312,57 @@ interface ReportPreviewModalProps {
 
 function ReportPreviewModal({ report, onClose }: ReportPreviewModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
+  const pdfRef = useRef<HTMLDivElement>(null);
+  const [viewMode, setViewMode] = useState<'summary' | 'full'>('summary');
+  const [fullReportContent, setFullReportContent] = useState<string | null>(null);
+  const [isLoadingFull, setIsLoadingFull] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  async function handleLoadFullReport() {
+    if (fullReportContent) {
+      setViewMode('full');
+      return;
+    }
+    setIsLoadingFull(true);
+    try {
+      const content = await apiClient.getReportContent(report.id);
+      setFullReportContent(content);
+      setViewMode('full');
+    } catch (error) {
+      console.error('Failed to load full report content', error);
+      const fallback = generateFallbackMarkdown(report);
+      setFullReportContent(fallback);
+      setViewMode('full');
+    } finally {
+      setIsLoadingFull(false);
+    }
+  }
+
+  async function handleDownloadPDF() {
+    if (!pdfRef.current) return;
+    setIsDownloading(true);
+    try {
+      const opt = {
+        margin:       [20, 15], // top/bottom, left/right margins in mm
+        filename:     `${report.title.replace(/\s+/g, '_')}_Report.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true, letterRendering: true, windowWidth: 650 },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak:    { mode: 'css', avoid: ['h1', 'h2', 'h3', 'p', 'li', 'strong'] }
+      };
+      await html2pdf().set(opt).from(pdfRef.current).save();
+    } catch (err) {
+      console.error('Failed to generate PDF', err);
+      alert('Error generating PDF.');
+    } finally {
+      setIsDownloading(false);
+    }
+  }
+
+  function getHdImageUrl(url: string | null | undefined): string {
+    if (!url) return '';
+    return url.replace(/\/crop\/\d+\/\d+\//, '/');
+  }
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -301,12 +397,12 @@ function ReportPreviewModal({ report, onClose }: ReportPreviewModalProps) {
       <div className="bg-surface border border-border rounded-2xl w-full max-w-2xl shadow-modal max-h-[90vh] overflow-y-auto scrollbar-hide">
 
         {/* ── Cover header ── */}
-        <div className="relative h-44 bg-elevated overflow-hidden rounded-t-2xl">
+        <div className="relative h-56 bg-elevated overflow-hidden rounded-t-2xl">
           <img
-            src={report.image}
+            src={getHdImageUrl(report.image)}
             alt={report.title}
             className="w-full h-full object-cover"
-            onError={e => { (e.target as HTMLImageElement).src = `https://picsum.photos/seed/${report.id}/600/300`; }}
+            onError={e => { (e.target as HTMLImageElement).src = `https://picsum.photos/seed/${report.id}/1920/1080`; }}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/30 to-transparent" />
           <button
@@ -335,9 +431,11 @@ function ReportPreviewModal({ report, onClose }: ReportPreviewModalProps) {
         {/* ── Body ── */}
         <div className="p-5 space-y-5">
 
-          {/* Macro-Skill Analysis */}
-          <div>
-            <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Macro-Skill Analysis</p>
+          {viewMode === 'summary' ? (
+            <>
+              {/* Macro-Skill Analysis */}
+              <div>
+                <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Macro-Skill Analysis</p>
             <div className="grid grid-cols-2 gap-3">
               {SKILL_CONFIG.map((skill) => {
                 const structured = structuredByLabel[skill.key];
@@ -422,8 +520,11 @@ function ReportPreviewModal({ report, onClose }: ReportPreviewModalProps) {
 
           {/* Actions */}
           <div className="flex gap-2 pt-1 border-t border-border">
-            <button className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-accent text-white text-xs font-semibold hover:bg-accent-dark transition-colors">
-              <i className="fas fa-file-alt" /> Full Report
+            <button 
+              onClick={handleLoadFullReport}
+              disabled={isLoadingFull}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-accent text-white text-xs font-semibold hover:bg-accent-dark transition-colors disabled:opacity-50">
+              {isLoadingFull ? <i className="fas fa-spinner fa-spin" /> : <i className="fas fa-file-alt" />} Full Report
             </button>
             <button className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-elevated text-primary-muted text-xs font-semibold hover:text-primary transition-colors border border-border">
               <i className="fas fa-download" /> Export
@@ -441,9 +542,54 @@ function ReportPreviewModal({ report, onClose }: ReportPreviewModalProps) {
             <i className="fas fa-calendar-alt text-[9px]" />
             Generated {fmtDate(report.createdAt)}
           </p>
-        </div>
+            </>
+          ) : (
+            <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <button 
+                onClick={() => setViewMode('summary')}
+                className="mb-4 text-xs font-semibold text-muted hover:text-primary transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-elevated border border-border w-fit"
+              >
+                <i className="fas fa-arrow-left" /> Back to Summary
+              </button>
 
+              <div className="space-y-4">
+                <p className="text-xs font-semibold text-muted uppercase tracking-wider">Full Report (PDF Preview)</p>
+                {fullReportContent ? (
+                  <>
+                    <div className="relative bg-[#323639] p-4 sm:p-6 pb-0 rounded-t-lg overflow-hidden h-[400px] flex justify-center border border-border border-b-0 shadow-inner">
+                      <div className="bg-white text-black p-8 sm:p-12 shadow-2xl w-full max-w-[700px] h-max text-[13px] leading-relaxed font-serif [&>h1]:text-2xl [&>h1]:font-bold [&>h1]:mb-4 [&>h1]:border-b [&>h1]:pb-2 [&>h2]:text-xl [&>h2]:font-bold [&>h2]:mt-6 [&>h2]:mb-3 [&>h3]:text-lg [&>h3]:font-bold [&>h3]:mt-5 [&>h3]:mb-2 [&>p]:mb-4 [&>ul]:list-disc [&>ul]:pl-5 [&>ul]:mb-4 [&>li]:mb-1 [&>hr]:my-5 [&>strong]:font-bold">
+                        <ReactMarkdown>{fullReportContent}</ReactMarkdown>
+                      </div>
+                      <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-[#323639] to-transparent pointer-events-none" />
+                    </div>
+                    <div className="bg-[#2a2d2f] border border-t-0 border-border rounded-b-lg p-5 flex justify-center shadow-inner">
+                      <button 
+                        onClick={handleDownloadPDF}
+                        disabled={isDownloading}
+                        className={`bg-accent hover:bg-accent-hover text-white font-medium py-2.5 px-6 rounded-md transition-colors flex items-center gap-2 shadow-lg ${isDownloading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                      >
+                        <i className="fas fa-file-pdf" />
+                        Download Full Report (PDF)
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-muted italic">No content available for this report.</p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Hidden container to generate the full uncut PDF */}
+      {fullReportContent && (
+        <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
+          <div ref={pdfRef} className="bg-white text-black w-[650px] p-6 text-[13px] leading-relaxed font-serif [&>h1]:text-2xl [&>h1]:font-bold [&>h1]:mb-4 [&>h1]:border-b [&>h1]:pb-2 [&>h2]:text-xl [&>h2]:font-bold [&>h2]:mt-6 [&>h2]:mb-3 [&>h3]:text-lg [&>h3]:font-bold [&>h3]:mt-5 [&>h3]:mb-2 [&>p]:mb-4 [&>ul]:list-disc [&>ul]:pl-5 [&>ul]:mb-4 [&>li]:mb-1 [&>hr]:my-5 [&>strong]:font-bold">
+            <ReactMarkdown>{fullReportContent}</ReactMarkdown>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
