@@ -58,16 +58,19 @@ export const useAuthStore = create<AuthStore>()(
         set({ isLoading: true, error: null });
 
         try {
-          const [data] = await Promise.all([
-            apiClient.demoLogin(),
-            new Promise(resolve => setTimeout(resolve, 3000)),
-          ]);
-          if (data?.user) {
-            get().setUser(data.user);
-          } else {
-            set({ isLoading: false });
-            await get().checkAuth();
-          }
+          // Simulated delay for visual effect
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          
+          const demoUser: UserProfile = {
+            id: 'demo-123',
+            email: 'demo@getsmart.com',
+            name: 'Demo User',
+            role: 'demo',
+            is_active: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+          get().setUser(demoUser);
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : 'Demo login failed',
@@ -118,13 +121,16 @@ export const useAuthStore = create<AuthStore>()(
           return;
         }
 
-        const hasToken = !!localStorage.getItem('gs_access_token');
+        // Force login screen on every initial load for visual demo purposes
+        localStorage.removeItem('gs_access_token');
+        localStorage.removeItem('auth-storage');
 
         set({
-          isAuthenticated: hasToken,
+          isAuthenticated: false,
+          user: null,
+          error: null,
           isLoading: false,
           isInitialized: true,
-          ...(hasToken ? {} : { user: null, error: null }),
         });
       },
     }),

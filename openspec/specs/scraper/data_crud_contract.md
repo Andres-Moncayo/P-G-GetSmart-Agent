@@ -159,7 +159,7 @@ Genre                    [Clear all]
 │ ☐ Adventure      7   │  │ Ring     │ │ of Legends│ │ TOTK     │ │
 │                      │  │ FromSoft │ │ Riot     │ │ Nintendo │ │
 │ Developer            │  │ 2022     │ │ 2009     │ │ 2023     │ │
-│ ☐ Riot Games     4   │  │ [🖥🎮🎮] │ │ [🖥]     │ │ [🎮]     │ │
+│ ☐ Riot Games     4   │  │ [] │ │ []     │ │ []     │ │
 │ ☐ FromSoftware   3   │  │ 2h ago   │ │ 5h ago   │ │ Phase 3/4│ │
 │ ...                  │  └──────────┘ └──────────┘ └──────────┘ │
 │                      │                                            │
@@ -172,7 +172,7 @@ Genre                    [Clear all]
 │ Status               │  │ Santa    │ │ CDPR     │ │ Epic     │ │
 │ ☑ Completed    28    │  │ Monica   │ │ 2020     │ │ 2017     │ │
 │ ☐ Processing     3   │  │ 2022     │ │          │ │          │ │
-│                      │  │ [🎮🖥]   │ │ [🖥🎮🎮] │ │ [🖥🎮🎮🎮]│ │
+│                      │  │ []   │ │ [] │ │ []│ │
 │                      │  │ 1d ago   │ │ 3d ago   │ │ 5d ago   │ │
 │                      │  └──────────┘ └──────────┘ └──────────┘ │
 │                      │                                            │

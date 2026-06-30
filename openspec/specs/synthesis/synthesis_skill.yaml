@@ -10,10 +10,11 @@ schema: spec-driven
 artifact:
   id: synthesis_skill
   name: Synthesis and Report Generation
-  version: "1.0.0"
+  version: "2.0.0"
   author: GetSmart Team
   created_at: "2026-06-17"
-  status: draft
+  updated_at: "2026-06-30"
+  status: active
   description: |
     Unifies four Macro-Skill outputs (Design & Art, UX, Technology & Systems,
     Strategy & Market) with the Master-JSON into a single coherent, professional-grade
@@ -119,7 +120,7 @@ output:
         - "Visual hierarchy with color-coded confidence"
         - "Charts/diagrams as SVG embeds"
         - "Page numbers, headers, footers"
-      post_processor: "WeasyPrint"
+      status: "planned — HTML content is generated but PDF rendering via WeasyPrint is not yet integrated"
 
   root_schema:
     type: object
@@ -149,7 +150,7 @@ output:
             const: "3.0.0"
           synthesis_model:
             type: string
-            const: "gemini-2.5-pro"
+            const: "gemini-1.5-flash"
           input_skills:
             type: array
             items:
@@ -1039,7 +1040,7 @@ example_output:
     data_gaps:
       - "Accessibility confidence limited by specialist review availability"
       - "Multiplayer netcode details constrained by proprietary engine opacity"
-    methodology_notes: "Synthesized from 4 Macro-Skill outputs using Gemini-2.5-pro at temperature 0.2. Conflict resolution applied 1 present_both case."
+    methodology_notes: "Synthesized from 4 Macro-Skill outputs using gemini-1.5-flash at temperature 0.2."
 
   confidence:
     overall_score: 0.83
@@ -1072,3 +1073,49 @@ example_output:
       - "Production/Business data constrained by FromSoftware's private status"
       - "Cultural Impact benefits from extensive high-authority sources"
       - "One cross-skill conflict resolved: Design vs. Strategy on combat innovation"
+
+# ============================================================
+# 4. IMPLEMENTATION CONTRACT (DeterministicSynthesizer)
+# ============================================================
+implementation:
+  class_name: "DeterministicSynthesizer"
+  source_file: "backend/app/services/synthesizer.py"
+  description: |
+    The synthesis process is handled by the DeterministicSynthesizer which uses
+    gemini-1.5-flash to unify the four macro-skill outputs.
+
+  ai_integration:
+    model: "gemini-1.5-flash"
+    temperature: 0.2
+    max_output_tokens: 8192
+    response_format: "application/json"
+    response_schema: "specs/schemas/final_report_schema.json"
+    
+  fallback_and_retries:
+    retry_policy:
+      framework: "tenacity"
+      max_attempts: 3
+      backoff: "exponential (2s to 60s)"
+      
+  output_generation:
+    json: "Direct output from LLM using response_schema"
+    markdown: "Generated via generate_markdown() in formatters.py"
+    pdf_html: "Generated via generate_pdf_html() in formatters.py"
+
+# ============================================================
+# 5. API ENDPOINTS
+# ============================================================
+endpoints:
+  - method: "POST"
+    path: "/api/v1/skills/synthesis"
+    description: "Execute the Synthesis Phase standalone"
+    request_body:
+      schema: "synthesis_input"
+    response:
+      schema: "FinalReport"
+    status_codes:
+      200: "Synthesis completed successfully"
+      400: "Invalid input missing required macro skills"
+      422: "Validation error on LLM output schema"
+      500: "LLM generation failed after retries"
+    implementation: "backend/app/api/skills_routes.py → execute_synthesis()"

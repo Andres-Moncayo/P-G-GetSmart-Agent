@@ -224,6 +224,23 @@ async getReportStatus(reportId: string) {
     return response.data;
   }
 
+  async getReportContent(reportId: string): Promise<string> {
+    const response = await this.client.get(`/api/v1/reports/${reportId}/content?format=markdown`);
+    return response.data?.content || '';
+  }
+
+  async getReportPdfUrl(reportId: string): Promise<string> {
+    try {
+      const response = await this.client.get(`/api/v1/reports/${reportId}/content?format=pdf`);
+      return response.data?.content_url || '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  async deleteReport(reportId: string): Promise<void> {
+    await this.client.delete(`/api/v1/reports/${reportId}`);
+  }
 }
 
 export const apiClient = new ApiClient();

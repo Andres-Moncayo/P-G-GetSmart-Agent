@@ -134,19 +134,22 @@ class ReportService:
             "technology_systems": "technology_systems",
             "strategy_market": "strategy_market",
         }
+        
+        analysis_ids = {}
 
         if ai_results:
             for skill_key, analysis_type in skill_map.items():
                 skill_data = ai_results.get(skill_key) or {}
                 if skill_data:
                     try:
-                        await self._analysis_repo.create_skill_analysis(
+                        analysis_row = await self._analysis_repo.create_skill_analysis(
                             report_id=report_id,
                             user_id=user_id,
                             game_id=game_id,
                             analysis_type=analysis_type,
                             raw_output=skill_data,
                         )
+                        analysis_ids[f"analysis_{skill_key}"] = analysis_row.id
                     except Exception as exc:
                         logger.warning("Could not save analysis row for %s: %s", analysis_type, exc)
 
@@ -167,7 +170,7 @@ class ReportService:
 
         # Update the report row with the final result
         report = await self._report_repo.save_synthesis_result(
-            report_id, master_json, markdown_content, started_at=started_at
+            report_id, master_json, markdown_content, started_at=started_at, analysis_ids=analysis_ids
         )
         return report
 

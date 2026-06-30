@@ -76,12 +76,15 @@ class StrategyMarketService:
         aliases = aliases or []
         logger.info("Starting Strategy & Market extraction for: %s", game_name)
 
+        failed_sources: list[str] = []
+
         # Collect hard data from APIs
         hard_data = await self._extract_hard_data(
             game_name=game_name,
             rawg_id=rawg_id,
             steam_app_id=steam_app_id,
             aliases=aliases,
+            failed_sources=failed_sources,
         )
 
         # Collect semantic data from web search
@@ -89,6 +92,7 @@ class StrategyMarketService:
             game_name=game_name,
             aliases=aliases,
             hard_data=hard_data,
+            failed_sources=failed_sources,
         )
 
         # Calculate evidence counts and confidence
@@ -103,6 +107,7 @@ class StrategyMarketService:
                 "confidence_score": confidence_score,
                 "data_sources": data_sources,
                 "evidence_count": evidence_count,
+                "failed_sources": list(set(failed_sources)),
             },
             "hard_data": hard_data,
             "semantic_data": semantic_data,
@@ -114,6 +119,7 @@ class StrategyMarketService:
         rawg_id: int | None,
         steam_app_id: int | None,
         aliases: list[str],
+        failed_sources: list[str],
     ) -> dict[str, Any]:
         """Extract structured market data from game APIs."""
         hard_data = {
@@ -152,6 +158,7 @@ class StrategyMarketService:
                 logger.info("RAWG market data extracted for %s", game_name)
             except Exception as e:
                 logger.warning("RAWG market extraction failed for %s: %s", game_name, e)
+                failed_sources.append("rawg")
 
         # Steam extraction (critical for market metrics)
         if steam_app_id:
@@ -161,11 +168,12 @@ class StrategyMarketService:
                 logger.info("Steam market data extracted for %s", game_name)
             except Exception as e:
                 logger.warning("Steam market extraction failed for %s: %s", game_name, e)
+                failed_sources.append("steam")
 
         return hard_data
 
     async def _extract_semantic_data(
-        self, game_name: str, aliases: list[str], hard_data: dict[str, Any]
+        self, game_name: str, aliases: list[str], hard_data: dict[str, Any], failed_sources: list[str]
     ) -> dict[str, Any]:
         """Extract semantic market data from web searches."""
         semantic_data = {
@@ -189,7 +197,8 @@ class StrategyMarketService:
                 market_results.get("results", [])
             )
         except Exception as e:
-            logger.warning("Market analysis search failed for %s: %s", game_name, e)
+            logger.warning("Search failed for %s: %s", game_name, e)
+            failed_sources.append("tavily")
 
         # Business Strategy Search
         strategy_query = self._build_strategy_query(game_name, publishers)
@@ -201,7 +210,8 @@ class StrategyMarketService:
                 strategy_results.get("results", [])
             )
         except Exception as e:
-            logger.warning("Business strategy search failed for %s: %s", game_name, e)
+            logger.warning("Search failed for %s: %s", game_name, e)
+            failed_sources.append("tavily")
 
         # Audience Demographics Search
         demographics_query = self._build_demographics_query(game_name, genres)
@@ -213,7 +223,8 @@ class StrategyMarketService:
                 demographics_results.get("results", [])
             )
         except Exception as e:
-            logger.warning("Demographics search failed for %s: %s", game_name, e)
+            logger.warning("Search failed for %s: %s", game_name, e)
+            failed_sources.append("tavily")
 
         # Revenue Performance Search
         revenue_query = self._build_revenue_query(game_name)
@@ -225,7 +236,8 @@ class StrategyMarketService:
                 revenue_results.get("results", [])
             )
         except Exception as e:
-            logger.warning("Revenue performance search failed for %s: %s", game_name, e)
+            logger.warning("Search failed for %s: %s", game_name, e)
+            failed_sources.append("tavily")
 
         # Competitive Landscape Search
         competitive_query = self._build_competitive_query(game_name, genres)
@@ -237,7 +249,8 @@ class StrategyMarketService:
                 competitive_results.get("results", [])
             )
         except Exception as e:
-            logger.warning("Competitive landscape search failed for %s: %s", game_name, e)
+            logger.warning("Search failed for %s: %s", game_name, e)
+            failed_sources.append("tavily")
 
         return semantic_data
 

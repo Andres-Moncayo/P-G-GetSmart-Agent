@@ -130,7 +130,7 @@ function PipelineProgressPage() {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'completed': return '✅';
-      case 'running': return '🔄';
+      case 'running': return '';
       case 'failed': return '❌';
       case 'skipped': return '⏭️';
       default: return '⏳';
@@ -196,7 +196,7 @@ function PipelineProgressPage() {
                 </span>
                 {pipelineData.is_complete && (
                   <span className="px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
-                    🎉 COMPLETED
+                     COMPLETED
                   </span>
                 )}
               </div>

@@ -70,10 +70,8 @@ function App() {
   if (isLoggingOut) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-6">
-        <div className="relative">
-          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-accent to-secondary flex items-center justify-center shadow-lg shadow-accent/30 opacity-50">
-            <i className="fas fa-gamepad text-white text-3xl" />
-          </div>
+        <div className="relative flex items-center justify-center w-20 h-20 opacity-50">
+          <img src="/logo.svg" alt="GetSmart Logo" className="w-20 h-20 drop-shadow-[0_0_15px_rgba(99,102,241,0.4)]" />
         </div>
         <div className="text-center">
           <h2 className="text-3xl font-bold text-primary mb-2">Bye bye!</h2>

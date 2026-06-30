@@ -4,19 +4,19 @@ Backend API server for GetSmart - Game Analysis Pipeline with real-time progress
 
 ## Features
 
-### 🚀 Enhanced Pipeline Tracking
+###  Enhanced Pipeline Tracking
 - **Real-time progress monitoring** with detailed phase breakdown
 - **Subtask-level tracking** with individual progress percentages
 - **Multi-state support**: `waiting`, `running`, `paused`, `blocked`, `completed`, `failed`
 - **API timeout handling** with automatic fallback
 - **Visual feedback** in frontend with color-coded states
 
-### 📊 Progress Tracking Features
+###  Progress Tracking Features
 
 #### States and Colors
-- **🔄 Running**: Amber/Orange (`bg-amber-500`) - with spinner animation
+- ** Running**: Amber/Orange (`bg-amber-500`) - with spinner animation
 - **⏸️ Paused**: Yellow (`bg-yellow-500`) - with pause icon
-- **🚫 Blocked**: Dark Red (`bg-red-700`) - with lock icon
+- ** Blocked**: Dark Red (`bg-red-700`) - with lock icon
 - **❌ Failed**: Red (`bg-red-500`) - with X icon
 - **✅ Completed**: Green (`bg-success`) - with checkmark
 
@@ -41,15 +41,15 @@ api_timeouts = {
 #### Subtask Progress Tracking
 ```python
 # Start a subtask
-await pipeline_tracker.start_subtask(report_id, Phase.SCRAPING, "Buscando en bases de datos")
+await pipeline_tracker.start_subtask(report_id, Phase.SCRAPING, "Searching in databases")
 
 # Update progress (0-100%)
-await pipeline_tracker.update_subtask_progress(report_id, Phase.SCRAPING, "Buscando en bases de datos", 75.0)
+await pipeline_tracker.update_subtask_progress(report_id, Phase.SCRAPING, "Searching in databases", 75.0)
 
 # Handle special states
-await pipeline_tracker.pause_subtask(report_id, Phase.SCRAPING, "Buscando en bases de datos", "Waiting for API rate limit")
-await pipeline_tracker.block_subtask(report_id, Phase.SCRAPING, "Buscando en bases de datos", "API not responding")
-await pipeline_tracker.fail_subtask(report_id, Phase.SCRAPING, "Buscando en bases de datos", "API returned 404")
+await pipeline_tracker.pause_subtask(report_id, Phase.SCRAPING, "Searching in databases", "Waiting for API rate limit")
+await pipeline_tracker.block_subtask(report_id, Phase.SCRAPING, "Searching in databases", "API not responding")
+await pipeline_tracker.fail_subtask(report_id, Phase.SCRAPING, "Searching in databases", "API returned 404")
 ```
 
 ## Usage
@@ -65,7 +65,7 @@ async def run_analysis_pipeline(report_id: str):
     await pipeline_tracker.start_phase(report_id, Phase.SCRAPING)
     
     # Start subtasks
-    subtasks = ["Buscando en bases de datos", "Obteniendo datos del juego", "Recopilando reseñas"]
+    subtasks = ["Searching in databases", "Fetching game data", "Gathering reviews"]
     
     for subtask in subtasks:
         await pipeline_tracker.start_subtask(report_id, Phase.SCRAPING, subtask)
@@ -92,7 +92,7 @@ async def run_analysis_pipeline(report_id: str):
             # Update subtask progress
             progress = (apis.index(api_name) + 1) / len(apis) * 100
             await pipeline_tracker.update_subtask_progress(
-                report_id, Phase.SCRAPING, "Obteniendo datos del juego", progress
+                report_id, Phase.SCRAPING, "Fetching game data", progress
             )
             
         except Exception as e:
@@ -161,26 +161,26 @@ const pollInterval = setInterval(async () => {
 ## Pipeline Flow
 
 ### 1. Scraping Phase (30% weight)
-- 🔍 Buscando en bases de datos
-- 📥 Obteniendo datos del juego  
-- 📊 Recopilando reseñas
+- Searching in databases
+- Fetching game data  
+- Gathering reviews
 - **Auto-fallback**: If one API times out, automatically tries next
 
 ### 2. Analysis Phase (40% weight)  
-- 🧠 Tech Systems
-- 📈 Strategy & Market
-- ⚡ Optimization
-- 🎯 Spec Detection
+- Tech Systems
+- Strategy & Market
+- Optimization
+- Spec Detection
 
 ### 3. Synthesis Phase (20% weight)
-- 🔄 Procesando resultados
-- 💡 Creando insights
-- 🔗 Construyendo correlaciones
+- Processing results
+- Creating insights
+- Building correlations
 
 ### 4. Storage Phase (10% weight)
-- ✅ Validando datos
-- 💾 Almacenando resultados
-- 📑 Actualizando índices
+- Validating data
+- Storing results
+- Updating indexes
 
 ## Development
 

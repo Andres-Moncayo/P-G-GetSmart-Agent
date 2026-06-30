@@ -10,10 +10,11 @@ schema: spec-driven
 artifact:
   id: tech_systems_skill
   name: Technology and Systems Macro-Skill
-  version: "1.0.0"
+  version: "2.0.0"
   author: GetSmart Team
   created_at: "2026-06-17"
-  status: draft
+  updated_at: "2026-06-30"
+  status: active
   description: |
     Analyzes technology and systems elements across 3 thematic categories:
     Technology/Performance, Multiplayer/Social, and Platforms/Distribution.
@@ -854,6 +855,60 @@ example_output:
       platforms_distribution: 0.82
     data_quality_notes:
       - "Strong technical sources from GitHub and benchmarks"
-      - "Multiplayer analysis limited by proprietary netcode"
       - "Platform data partially inferred from official specs"
       - "Some performance data may be outdated due to patches"
+
+# ============================================================
+# 4. IMPLEMENTATION CONTRACT (BaseMacroSkill)
+# ============================================================
+implementation:
+  base_class: "BaseMacroSkill"
+  source_file: "backend/app/services/macro_skills/base_skill.py"
+  description: |
+    All macro-skills inherit from BaseMacroSkill which provides the core
+    orchestration for LLM execution, retries, caching, and fallback logic.
+
+  interfaces:
+    required_methods:
+      - "get_system_prompt() -> str"
+      - "build_user_prompt(context: dict) -> str"
+      - "get_response_model() -> Type[BaseModel]"
+
+  ai_integration:
+    primary_sdk: "google.genai (planned/current) and google-generativeai (legacy/deprecated)"
+    fallback_client: "GeminiClient (HTTP fallback via httpx)"
+    model: "gemini-2.5-flash"
+    temperature: 0.3
+    max_output_tokens: 6000
+    response_format: "application/json"
+    
+  resilience:
+    retry_policy:
+      framework: "tenacity"
+      max_attempts: 3
+      backoff: "exponential (1s to 30s)"
+      retryable_errors: ["ResourceExhausted", "InternalServerError", "ServiceUnavailable", "Timeout"]
+    
+  caching:
+    framework: "CacheManager (Redis in-memory)"
+    ttl: "86400 (24 hours)"
+    key_format: "skill:{skill_id}:{game_id}:{hash}"
+    hash_components: ["context_data_hash", "prompt_hash"]
+
+# ============================================================
+# 5. API ENDPOINTS
+# ============================================================
+endpoints:
+  - method: "POST"
+    path: "/api/v1/skills/technology-systems"
+    description: "Execute the Technology & Systems Macro-Skill standalone"
+    request_body:
+      schema: "mini_context_technology_systems"
+    response:
+      schema: "TechnologySystemsAnalysisOutput"
+    status_codes:
+      200: "Analysis completed successfully"
+      400: "Invalid mini-context input"
+      422: "Validation error on LLM output"
+      500: "LLM generation failed after retries"
+    implementation: "backend/app/api/skills_routes.py → execute_technology_systems()"

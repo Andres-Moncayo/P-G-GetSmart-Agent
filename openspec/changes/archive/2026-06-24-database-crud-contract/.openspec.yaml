@@ -1,4 +1,0 @@
-schema: spec-driven
-created: 2026-06-23
-goal: Implement high-performance database schema with direct CRUD operations for
-  report management, markdown content handling, and multi-format API endpoints

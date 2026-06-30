@@ -1,0 +1,240 @@
+schema: spec-driven
+
+# ============================================================
+# Artifact: database_schema_contract.yaml
+# Domain: Database Schema & ORM Models
+# Status: active
+# ============================================================
+
+artifact:
+  id: database_schema_contract
+  name: Database Schema & ORM Contract
+  version: "1.0.0"
+  author: GetSmart Team
+  created_at: "2026-06-30"
+  status: active
+  description: |
+    Documents the PostgreSQL database schema used by GetSmart. The canonical
+    DDL is in backend/UnityGsmart.sql. SQLAlchemy ORM models must match 1:1.
+    The backend does NOT run create_all — schema is applied externally.
+
+# ============================================================
+# 1. CONNECTION & DRIVER
+# ============================================================
+connection:
+  driver: "asyncpg"
+  sqlalchemy_url_scheme: "postgresql+asyncpg"
+  source_file: "backend/app/db/connection.py"
+  features:
+    - "Automatic scheme normalization (postgresql:// → postgresql+asyncpg://)"
+    - "SSL support via sslmode=require query parameter"
+    - "Async session factory via async_sessionmaker"
+    - "RLS-aware session (set_config app.current_user_id)"
+  env_vars:
+    - "DATABASE_URL"
+    - "POSTGREST_URL (fallback)"
+
+# ============================================================
+# 2. TABLES
+# ============================================================
+tables:
+  # ── reports ──────────────────────────────────────────────────
+  reports:
+    source_file: "backend/app/models/report.py"
+    orm_class: "Report"
+    description: "Main report entity — the synthesized final result for a game"
+    columns:
+      # Identity
+      id: { type: "UUID", primary_key: true, default: "uuid4" }
+      user_id: { type: "UUID", nullable: false }
+      game_id: { type: "UUID", nullable: false }
+      
+      # Status
+      report_status: { type: "String(20)", nullable: false, default: "queued" }
+      report_type: { type: "String(50)", nullable: false, default: "comprehensive" }
+      confidence_score: { type: "Numeric(3,2)" }
+      
+      # Search / filter columns (indexed)
+      search_query: { type: "Text" }
+      game_name: { type: "String(255)", nullable: false }
+      game_slug: { type: "String(255)" }
+      release_year: { type: "Integer" }
+      primary_genre: { type: "String(100)" }
+      primary_platform: { type: "String(100)" }
+      developer_name: { type: "String(255)" }
+      cover_url: { type: "String(1000)" }
+      all_genres: { type: "ARRAY(Text)" }
+      all_platforms: { type: "ARRAY(Text)" }
+      tags: { type: "ARRAY(Text)" }
+      
+      # Pipeline progress
+      current_phase: { type: "String(50)" }
+      pipeline_progress: { type: "Integer", default: 0 }
+      
+      # Timestamps
+      created_at: { type: "DateTime(tz)", server_default: "now()" }
+      updated_at: { type: "DateTime(tz)", server_default: "now()", onupdate: "now()" }
+      completed_at: { type: "DateTime(tz)" }
+      report_date: { type: "Date", server_default: "current_date()" }
+      
+      # Engagement metrics
+      view_count: { type: "Integer", default: 0 }
+      download_count: { type: "Integer", default: 0 }
+      share_count: { type: "Integer", default: 0 }
+      processing_time_ms: { type: "Integer" }
+      file_size_mb: { type: "Numeric(8,2)" }
+      
+      # Content
+      markdown_content: { type: "Text" }
+      markdown_summary: { type: "Text" }
+      pdf_html_content: { type: "Text" }
+      
+      # File URLs
+      url_json: { type: "String(1000)" }
+      url_json_rag: { type: "String(1000)" }
+      url_markdown: { type: "String(1000)" }
+      url_pdf: { type: "String(1000)" }
+      
+      # Generation flags
+      json_generated: { type: "Boolean", default: false }
+      markdown_generated: { type: "Boolean", default: false }
+      pdf_generated: { type: "Boolean", default: false }
+      json_rag_generated: { type: "Boolean", default: false }
+      
+      # Structured JSONB sections (final_report_schema)
+      report_metadata_jsonb: { type: "JSONB", default: "{}" }
+      executive_summary_jsonb: { type: "JSONB", default: "{}" }
+      thematic_analysis_jsonb: { type: "JSONB", default: "{}" }
+      cross_cutting_insights_jsonb: { type: "JSONB", default: "{}" }
+      strategic_recommendations_jsonb: { type: "JSONB", default: "{}" }
+      risk_assessment_jsonb: { type: "JSONB", default: "{}" }
+      appendices_jsonb: { type: "JSONB", default: "{}" }
+      confidence_analysis_jsonb: { type: "JSONB", default: "{}" }
+      
+      # Additional data
+      game_data_jsonb: { type: "JSONB", default: "{}" }
+      pipeline_data_jsonb: { type: "JSONB", default: "{}" }
+      performance_metrics_jsonb: { type: "JSONB", default: "{}" }
+      user_metadata_jsonb: { type: "JSONB", default: "{}" }
+      
+      # Analysis foreign keys
+      analysis_design_art: { type: "UUID", fk: "analysis.id" }
+      analysis_user_experience: { type: "UUID", fk: "analysis.id" }
+      analysis_technology_systems: { type: "UUID", fk: "analysis.id" }
+      analysis_strategy_market: { type: "UUID", fk: "analysis.id" }
+      analysis_synthesis: { type: "UUID", fk: "analysis.id" }
+
+  # ── analysis ─────────────────────────────────────────────────
+  analysis:
+    source_file: "backend/app/models/report.py"
+    orm_class: "Analysis"
+    description: "One row per macro-skill execution (+ one synthesis row) for a report"
+    columns:
+      id: { type: "UUID", primary_key: true, default: "uuid4" }
+      user_id: { type: "UUID", nullable: false }
+      game_id: { type: "UUID", nullable: false }
+      analysis_type: { type: "String(50)", nullable: false, enum: ["design_art", "user_experience", "technology_systems", "strategy_market", "synthesis"] }
+      status: { type: "String(20)", nullable: false, default: "queued" }
+      confidence_score: { type: "Numeric(3,2)" }
+      query_params: { type: "JSONB", default: "{}" }
+      target_game_filters: { type: "JSONB", default: "{}" }
+      pipeline_config: { type: "JSONB", default: "{}" }
+      created_at: { type: "DateTime(tz)", server_default: "now()" }
+      updated_at: { type: "DateTime(tz)", server_default: "now()", onupdate: "now()" }
+      started_at: { type: "DateTime(tz)" }
+      completed_at: { type: "DateTime(tz)" }
+      processing_time_ms: { type: "Integer" }
+      priority: { type: "Integer", default: 5 }
+      input_data_jsonb: { type: "JSONB", default: "{}" }
+      raw_output_jsonb: { type: "JSONB", default: "{}" }
+      processed_output_jsonb: { type: "JSONB", default: "{}" }
+      metrics_jsonb: { type: "JSONB", default: "{}" }
+      error_details_jsonb: { type: "JSONB", default: "{}" }
+      final_report_id: { type: "UUID" }
+
+  # ── users ────────────────────────────────────────────────────
+  users:
+    source_file: "backend/app/models/user.py"
+    orm_class: "User"
+    description: "User accounts with SSO and profile data stored in JSONB"
+    columns:
+      id: { type: "UUID", primary_key: true, default: "uuid4" }
+      email: { type: "String(255)", unique: true, nullable: false, indexed: true }
+      username: { type: "String(100)", unique: true, nullable: false, indexed: true }
+      password_hash: { type: "String(255)", nullable: true, description: "NULL for SSO users" }
+      is_verified: { type: "Boolean", default: false }
+      is_active: { type: "Boolean", default: true }
+      created_at: { type: "DateTime(tz)", server_default: "now()" }
+      updated_at: { type: "DateTime(tz)", server_default: "now()", onupdate: "now()" }
+      last_login_at: { type: "DateTime(tz)", nullable: true }
+      timezone: { type: "String(50)", default: "UTC" }
+      language: { type: "String(10)", default: "en" }
+      profile_jsonb: { type: "JSONB", default: "{}", description: "display_name, avatar_url, sso_provider" }
+      settings_jsonb: { type: "JSONB", default: "{}", description: "theme, notifications, preferences" }
+    relationships:
+      roles: { target: "Role", cascade: "all, delete-orphan" }
+      api_keys: { target: "ApiKey", cascade: "all, delete-orphan" }
+    convenience_properties:
+      name: "profile_jsonb.display_name or username"
+      sso_provider: "profile_jsonb.sso_provider"
+      preferences: "settings_jsonb"
+
+  # ── roles ────────────────────────────────────────────────────
+  roles:
+    source_file: "backend/app/models/user.py"
+    orm_class: "Role"
+    description: "RBAC role assignments per user"
+    columns:
+      id: { type: "UUID", primary_key: true, default: "uuid4" }
+      user_id: { type: "UUID", fk: "users.id", on_delete: "CASCADE" }
+      role_name: { type: "String(50)", nullable: false, enum: ["admin", "developer", "user"] }
+      is_active: { type: "Boolean", default: true }
+    constraints:
+      - "UNIQUE(user_id, role_name, is_active)"
+
+  # ── api_keys (planned) ──────────────────────────────────────
+  api_keys:
+    source_file: "backend/app/models/user.py"
+    orm_class: "ApiKey"
+    status: "planned — ORM model exists but table not in UnityGsmart.sql"
+    description: "API key management for programmatic access"
+    columns:
+      id: { type: "UUID", primary_key: true }
+      user_id: { type: "UUID", fk: "users.id" }
+      name: { type: "String(255)" }
+      key_hash: { type: "String(255)", unique: true }
+      prefix: { type: "String(8)" }
+      scopes: { type: "ARRAY(String)", default: "[read]" }
+      last_used_at: { type: "DateTime(tz)", nullable: true }
+      created_at: { type: "DateTime(tz)", server_default: "now()" }
+      is_active: { type: "Boolean", default: true }
+
+# ============================================================
+# 3. CANONICAL DDL
+# ============================================================
+canonical_ddl:
+  file: "backend/UnityGsmart.sql"
+  size: "29KB"
+  note: |
+    The schema is applied externally via this SQL file. The backend does NOT
+    run SQLAlchemy create_all on startup. ORM models must match the DDL exactly.
+
+# ============================================================
+# 4. PYDANTIC RESPONSE MODELS (Legacy compatibility)
+# ============================================================
+pydantic_models:
+  source_file: "backend/app/models/__init__.py"
+  description: "Pydantic models used by API endpoints (not ORM)"
+  models:
+    Report:
+      fields: [id, game, status, current_phase, pipeline_progress, confidence_score, tags, created_at, updated_at, executive_summary, thematic_analysis, confidence_analysis]
+    Game:
+      fields: [id, name, slug, release_year, developer, primary_genre, primary_platform, all_genres, all_platforms, cover_url]
+    ReportListResponse:
+      fields: [items, pagination, facets]
+    Pagination:
+      fields: [page, page_size, total, total_pages, has_next, has_prev]
+    Facets:
+      fields: [genre, developer, platform, status, year_range]
+    FacetCount:
+      fields: [value, count, label]

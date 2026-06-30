@@ -56,9 +56,7 @@ export const Topbar: React.FC = () => {
         {/* Left */}
         <div className="flex items-center gap-8">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent to-secondary flex items-center justify-center">
-              <i className="fas fa-gamepad text-white text-sm" />
-            </div>
+            <img src="/logo.svg" alt="GetSmart Logo" className="w-8 h-8 drop-shadow-[0_0_8px_rgba(99,102,241,0.4)]" />
             <h1 className="text-lg font-bold text-primary">
               Get<span className="text-accent">Smart</span>
             </h1>

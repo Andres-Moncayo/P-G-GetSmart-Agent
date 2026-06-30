@@ -9,13 +9,15 @@ schema: spec-driven
 artifact:
   id: specs_index
   name: Master Specifications Index
-  version: "1.0.0"
+  version: "2.0.0"
   author: GetSmart Team
   created_at: "2026-06-18"
-  status: draft
+  updated_at: "2026-06-30"
+  status: active
   description: |
     Master index of all OpenSpec specifications in this repository.
     This index serves as the entry point for OpenSpec validation discovery.
+    Updated to reflect current code implementation state.
 
 # ============================================================
 # 1. SPECIFICATIONS INDEX
@@ -37,10 +39,10 @@ specs_index:
   
   scraper:
     - spec_file: "scraper/pre_scrap_contract.yaml"
-      description: "Pre-Scrap Phase 0 Contract"
+      description: "Pre-Scrap Phase 0 Contract (Disambiguation)"
       capability: "data-ingestion"
     - spec_file: "scraper/scraper_contract.yaml"
-      description: "Scraper Phase 1 Contract"
+      description: "Scraper Phase 1 Contract (Ingestion)"
       capability: "data-ingestion"
     - spec_file: "scraper/data_crud_contract.yaml"
       description: "Data CRUD Contract"
@@ -54,6 +56,11 @@ specs_index:
       description: "Synthesis Phase 4 Contract"
       capability: "synthesis"
   
+  pipeline:
+    - spec_file: "pipeline/pipeline_contract.yaml"
+      description: "Pipeline Orchestration & Tracking Contract"
+      capability: "pipeline-management"
+  
   ui_and_login:
     - spec_file: "ui_and_login/ui_login_contract.yaml"
       description: "UI and Login Contract"
@@ -63,3 +70,6 @@ specs_index:
     - spec_file: "schemas/final_report_schema.json"
       description: "Final Report JSON Schema"
       capability: "output-schema"
+    - spec_file: "schemas/database_schema_contract.yaml"
+      description: "Database Schema & ORM Contract"
+      capability: "database-schema"

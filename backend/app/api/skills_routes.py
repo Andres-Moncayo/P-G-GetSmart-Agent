@@ -14,6 +14,7 @@ from ..services.macro_skills.user_experience.schemas import UXMiniContext
 from ..services.macro_skills.user_experience import UserExperienceSkill
 from ..services.macro_skills.tech_system_skill import TechSystemService
 from ..services.macro_skills.strategy_market_skill import StrategyMarketService
+from ..services.macro_skills.design_art_skill.design_art_service import DesignArtService
 
 logger = logging.getLogger(__name__)
 
@@ -38,3 +39,15 @@ async def analyze_strategy_market(mini_context: Dict[str, Any]) -> dict:
     """Analyze Strategy and Market aspects of a game."""
     skill = StrategyMarketService()
     return await skill.analyze(mini_context)
+
+from ..models.macro_skills.design_art_models import DesignArtInputModel
+
+@skills_router.post("/design-art")
+async def analyze_design_art(mini_context: DesignArtInputModel) -> dict:
+    """Analyze Design and Art aspects of a game."""
+    skill = DesignArtService()
+    result = await skill.analyze(mini_context)
+    # The analyze method returns a Pydantic model (DesignArtOutputModel), 
+    # we need to dump it to a dict for the endpoint response if we declared -> dict,
+    # or let FastAPI serialize it if we return it directly.
+    return result.model_dump()

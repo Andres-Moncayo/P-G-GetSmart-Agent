@@ -13,7 +13,7 @@ artifact:
   version: "2.0.0"
   author: GetSmart Team
   created_at: "2026-06-17"
-  updated_at: "2026-06-23"
+  updated_at: "2026-06-30"
   status: active
   description: |
     Defines the authentication, navigation, user profile, and dashboard contracts
@@ -709,6 +709,59 @@ components:
             label: "Sign out"
             style: "text-danger hover:bg-danger/10"
             action: "logout"
+            
+  # ---- Disambiguation Modal ----
+  disambiguation_modal:
+    trigger: "new_analysis_flow"
+    layout: "centered_modal"
+    width: "480px"
+    background: "surface"
+    border: "border"
+    shadow: "shadow_modal"
+    animation: "slide_up"
+    sections:
+      - type: "header"
+        title: "Disambiguate Game"
+        subtitle: "Select the correct game from the IGDB results"
+      - type: "search_input"
+        placeholder: "Search for a game..."
+        behavior: "debounced_api_call"
+      - type: "results_list"
+        item_component: "GameResultCard"
+        fields: ["cover_image", "title", "year", "platforms", "developer"]
+        empty_state: "No games found matching your query."
+      - type: "footer"
+        actions:
+          - label: "Cancel"
+            style: "surface_border"
+          - label: "Confirm & Start"
+            style: "primary_accent"
+
+  # ---- Pipeline Tracker ----
+  pipeline_tracker:
+    layout: "full_page_or_drawer"
+    background: "bg"
+    sections:
+      - type: "header"
+        title: "Analysis Pipeline: {GameName}"
+        status_badge: "processing | completed | failed"
+      - type: "phase_stepper"
+        phases:
+          - name: "Ingestion"
+            status: "completed | active | pending"
+            progress: "100%"
+          - name: "Consolidation"
+            status: "completed | active | pending"
+            progress: "X%"
+          - name: "Analysis (Macro-Skills)"
+            status: "completed | active | pending"
+            sub_tasks: ["Design & Art", "UX", "Tech & Systems", "Strategy & Market"]
+          - name: "Synthesis"
+            status: "completed | active | pending"
+      - type: "log_viewer"
+        style: "terminal_window"
+        behavior: "auto_scroll_to_bottom"
+        websocket_stream: true
 
   # ---- Dashboard ----
   dashboard:
@@ -846,6 +899,7 @@ state:
   auth_store:
     library: "zustand"
     persist: "localStorage"
+    description: "Replaces legacy AuthContext for global authentication state management."
     fields:
       - name: "user"
         type: "UserProfile | null"

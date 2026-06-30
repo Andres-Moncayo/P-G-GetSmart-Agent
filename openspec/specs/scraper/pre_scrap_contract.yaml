@@ -9,10 +9,11 @@ schema: spec-driven
 artifact:
   id: pre_scrap_contract
   name: Pre-Scrap & Disambiguation Contract
-  version: "1.0.0"
+  version: "2.0.0"
   author: GetSmart Team
   created_at: "2026-06-17"
-  status: draft
+  updated_at: "2026-06-30"
+  status: active
   description: |
     Defines the disambiguation flow: user inputs a game title, the system queries
     IGDB and RAWG APIs to find candidates, presents them to the user for selection,
@@ -41,9 +42,9 @@ flow:
       K -->|Yes| L[Confirm game_id + year]
       L --> M[Enable "Run Pipeline" button]
       M --> N[User clicks Run Pipeline]
-      N --> O[POST /api/v1/pipeline/run]
-      O --> P[Return pipeline_id]
-      P --> Q[Show Pipeline Modal]
+      N --> O[POST /api/v1/games/pipeline/start]
+      O --> P[Return report_id]
+      P --> Q[Navigate to Pipeline Progress Page]
 
 # ============================================================
 # 2. DATA SOURCES
@@ -59,11 +60,11 @@ data_sources:
         max_retries: 2
         backoff: "exponential"
       query_template: |
-        fields id, name, first_release_date, platforms.name, 
+        fields id, name, slug, first_release_date, platforms.name, 
                involved_companies.company.name, involved_companies.developer,
                genres.name, cover.url, summary;
         search "{query}";
-        limit 10;
+        limit {limit};
 
     - name: "RAWG API"
       endpoint: "https://api.rawg.io/api/games"
@@ -79,15 +80,25 @@ data_sources:
         page_size: 10
 
   fallback:
-    - name: "Steam Storefront API"
-      endpoint: "https://store.steampowered.com/api/storesearch/"
-      method: "GET"
-      auth_type: "None"
-      timeout_ms: 3000
-      query_params:
-        term: "{query}"
-        l: "english"
-        cc: "US"
+    note: "Steam Storefront fallback search is planned but not yet implemented in game_search.py"
+
+  merge_strategy:
+    description: |
+      IGDB and RAWG results are queried in parallel via asyncio.gather.
+      Results are merged by normalized game name (lowercase, stripped).
+      When the same title appears in both: IGDB entry is canonical, RAWG
+      source/ids are attached. RAWG-only entries are appended at the end.
+    implementation: "backend/app/services/game_search.py → _merge_candidates()"
+
+  input_validation:
+    query_blocklist:
+      description: "Regex that rejects dangerous characters in search queries"
+      pattern: '[<>{}\\"\]|script|javascript'
+      flags: "case-insensitive"
+      error_code: "SEARCH_001"
+    api_key_check:
+      description: "Returns 503 if no RAWG_API_KEY and no IGDB credentials configured"
+      error_code: "SEARCH_002"
 
 # ============================================================
 # 3. CANDIDATE SCHEMA
@@ -95,7 +106,7 @@ data_sources:
 candidate_schema:
   $id: "https://getsmart.dev/schemas/v1/game-candidate"
   type: object
-  required: ["id", "name", "release_year", "sources"]
+  required: ["id", "name", "sources"]
   properties:
     id:
       type: string
@@ -107,8 +118,8 @@ candidate_schema:
       type: string
       description: "URL-friendly slug"
     release_year:
-      type: integer
-      description: "Release year"
+      type: ["integer", "null"]
+      description: "Release year (nullable — not all sources provide it)"
     release_date:
       type: string
       format: date
@@ -284,63 +295,50 @@ endpoints:
       "409":
         description: "Game already has a report in progress"
 
-  - path: POST /api/v1/pipeline/run
-    summary: "Trigger the analysis pipeline for a confirmed game"
+  - path: POST /api/v1/games/pipeline/start
+    summary: "Start the analysis pipeline for a confirmed game"
     tags: ["pipeline"]
-    security:
-      - cookieAuth: []
+    description: |
+      Starts the full pipeline (scraping → analysis → synthesis → storage)
+      as an asyncio background task. Returns immediately with a report_id
+      for status polling. See pipeline_contract.yaml for full details.
     requestBody:
       required: true
       content:
         application/json:
           schema:
             type: object
-            required: ["game_id", "pipeline_token"]
+            required: ["game_id"]
             properties:
               game_id:
                 type: string
-              pipeline_token:
+              source:
                 type: string
-              options:
-                type: object
-                properties:
-                  output_formats:
-                    type: array
-                    items:
-                      type: string
-                      enum: ["markdown", "pdf", "json"]
-                    default: ["markdown", "pdf", "json"]
-                  priority:
-                    type: string
-                    enum: ["normal", "high"]
-                    default: "normal"
+                default: "rawg"
+              pipeline_token:
+                type: ["string", "null"]
     responses:
-      "202":
-        description: "Pipeline accepted and queued"
+      "200":
+        description: "Pipeline started (runs in background)"
         content:
           application/json:
             schema:
-              type: object
-              required: ["pipeline_id", "status", "estimated_duration_seconds"]
-              properties:
-                pipeline_id:
-                  type: string
-                  format: uuid
-                status:
-                  type: string
-                  enum: ["queued", "running"]
-                estimated_duration_seconds:
-                  type: integer
-                  description: "Estimated pipeline duration"
-                queue_position:
-                  type: integer
-                  description: "Position in queue if queued"
-      "400":
-        description: "Invalid pipeline token or game_id"
-      "401":
-        description: "Invalid or expired pipeline token"
-      "409":
-        description: "Pipeline already running for this game"
+              $ref: "pipeline/pipeline_contract.yaml#/models/PipelineResponse"
+      "404":
+        description: "Game not found — run search first"
+      "500":
+        description: "Failed to start pipeline"
+
+  # Legacy/deprecated endpoints
+  - path: POST /api/v1/games/scrape
+    summary: "Run Phase 1 scraper logic immediately (legacy)"
+    status: "legacy/deprecated"
+    tags: ["scraper"]
+
+  - path: POST /api/v1/games/scraper/analyze
+    summary: "Frontend scraper compatibility endpoint using Phase 1 real scraping (legacy)"
+    status: "legacy/deprecated"
+    tags: ["scraper"]
 
 # ============================================================
 # 5. UI COMPONENT: DISAMBIGUATION MODAL
