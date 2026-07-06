@@ -253,22 +253,9 @@ MOCK_GAMES.forEach((game, index) => {
 function handleMockFallback(config: AxiosRequestConfig): any {
   const url = config.url || '';
   
-  if (url === '/api/v1/reports') {
-    const listResponse: ApiReportListResponse = {
-      items: Object.values(MOCK_REPORTS),
-      pagination: { page: 1, page_size: 200, total: MOCK_GAMES.length, total_pages: 1 },
-      facets: {
-        genre: [{ value: 'Adventure', count: 3 }, { value: 'RPG', count: 4 }, { value: 'Indie', count: 3 }, { value: 'Simulator', count: 2 }],
-        platform: [{ value: 'PC', count: 8 }, { value: 'PlayStation 4', count: 6 }, { value: 'Xbox One', count: 5 }, { value: 'Nintendo Switch', count: 4 }],
-        developer: [{ value: 'CD PROJEKT RED', count: 2 }, { value: 'Rockstar Games', count: 2 }],
-        status: [{ value: 'completed', count: MOCK_GAMES.length }]
-      }
-    };
-    return { data: listResponse, status: 200, statusText: 'OK', headers: {}, config };
-  }
-  
-  const reportDetailMatch = url.match(/^\/api\/v1\/reports\/([a-fA-F0-9-]+)$/);
-  if (reportDetailMatch) {
+  // 1. Report Detail Match (Checked first to avoid shadowing by the list matcher)
+  const reportDetailMatch = url.match(/\/api\/v1\/reports\/([a-fA-F0-9-]+)(\?|$)/);
+  if (reportDetailMatch && !url.includes('/content')) {
     const reportId = reportDetailMatch[1];
     const report = MOCK_REPORTS[reportId];
     if (report) {
@@ -276,7 +263,8 @@ function handleMockFallback(config: AxiosRequestConfig): any {
     }
   }
 
-  const reportContentMatch = url.match(/^\/api\/v1\/reports\/([a-fA-F0-9-]+)\/content/);
+  // 2. Report Content Match
+  const reportContentMatch = url.match(/\/api\/v1\/reports\/([a-fA-F0-9-]+)\/content/);
   if (reportContentMatch) {
     const reportId = reportContentMatch[1];
     const report = MOCK_REPORTS[reportId];
@@ -286,7 +274,8 @@ function handleMockFallback(config: AxiosRequestConfig): any {
     }
   }
 
-  const pipelineStatusMatch = url.match(/^\/api\/v1\/games\/pipeline\/([a-fA-F0-9-]+)\/status$/);
+  // 3. Pipeline Status Match
+  const pipelineStatusMatch = url.match(/\/api\/v1\/games\/pipeline\/([a-fA-F0-9-]+)\/status/);
   if (pipelineStatusMatch) {
     const reportId = pipelineStatusMatch[1];
     const report = MOCK_REPORTS[reportId];
@@ -309,13 +298,29 @@ function handleMockFallback(config: AxiosRequestConfig): any {
     }
   }
 
-  const scraperStatusMatch = url.match(/^\/scraper\/api\/v1\/reports\/([a-fA-F0-9-]+)\/status$/);
+  // 4. Scraper Status Match
+  const scraperStatusMatch = url.match(/\/scraper\/api\/v1\/reports\/([a-fA-F0-9-]+)\/status/);
   if (scraperStatusMatch) {
     const reportId = scraperStatusMatch[1];
     const report = MOCK_REPORTS[reportId];
     if (report) {
       return { data: { status: 'completed', overall_progress: 100 }, status: 200, statusText: 'OK', headers: {}, config };
     }
+  }
+
+  // 5. Reports List Match (Checked last to act as fallback for listing)
+  if (url.includes('/api/v1/reports')) {
+    const listResponse: ApiReportListResponse = {
+      items: Object.values(MOCK_REPORTS),
+      pagination: { page: 1, page_size: 200, total: MOCK_GAMES.length, total_pages: 1 },
+      facets: {
+        genre: [{ value: 'Adventure', count: 3 }, { value: 'RPG', count: 4 }, { value: 'Indie', count: 3 }, { value: 'Simulator', count: 2 }],
+        platform: [{ value: 'PC', count: 8 }, { value: 'PlayStation 4', count: 6 }, { value: 'Xbox One', count: 5 }, { value: 'Nintendo Switch', count: 4 }],
+        developer: [{ value: 'CD PROJEKT RED', count: 2 }, { value: 'Rockstar Games', count: 2 }],
+        status: [{ value: 'completed', count: MOCK_GAMES.length }]
+      }
+    };
+    return { data: listResponse, status: 200, statusText: 'OK', headers: {}, config };
   }
 
   return null;
