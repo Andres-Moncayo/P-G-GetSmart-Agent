@@ -309,13 +309,89 @@ function ReportCard({ report, onClick, onDelete, onRefresh }: ReportCardProps) {
   );
 }
 
+// ─── FlipCard Component ───────────────────────────────────────────────────────
+
+interface FlipCardProps {
+  children: (params: { setIsFlipped: React.Dispatch<React.SetStateAction<boolean>> }) => React.ReactNode;
+  tooltip: React.ReactNode;
+  className?: string;
+}
+
+function FlipCard({ children, tooltip, className = '' }: FlipCardProps) {
+  const [isFlipped, setIsFlipped] = useState(false);
+
+  return (
+    <div
+      className={`relative preserve-3d transition-all duration-700 ${isFlipped ? 'rotate-y-180' : ''} ${className}`}
+      style={{ transformStyle: 'preserve-3d' }}
+    >
+      {/* Front side */}
+      <div 
+        className={`w-full h-full backface-hidden ${isFlipped ? 'pointer-events-none' : ''}`}
+        style={{ backfaceVisibility: 'hidden' }}
+      >
+        {children({ setIsFlipped })}
+      </div>
+      
+      {/* Back side */}
+      <div 
+        className={`absolute inset-0 rounded-xl p-4 bg-gradient-to-br from-surface to-elevated border border-border rotate-y-180 backface-hidden ${!isFlipped ? 'pointer-events-none' : ''}`}
+        style={{ 
+          backfaceVisibility: 'hidden',
+          transform: 'rotateY(180deg)'
+        }}
+      >
+        {/* Tooltip content */}
+        <div className="flex-1 overflow-y-auto">
+          {tooltip}
+        </div>
+        {/* Close button (X) */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsFlipped(false);
+          }}
+          className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition-colors"
+          title="Cerrar detalle"
+        >
+          <i className="fas fa-times text-[10px]" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── ReportPreviewModal ───────────────────────────────────────────────────────
 
 const SKILL_CONFIG = [
-  { key: 'Design & Art',         icon: 'fa-palette',    color: 'from-purple-500/15 to-violet-600/10', textColor: 'text-purple-400' },
-  { key: 'User Experience',      icon: 'fa-user-circle',color: 'from-sky-500/15 to-cyan-600/10',      textColor: 'text-sky-400'    },
-  { key: 'Technology Systems',   icon: 'fa-microchip',  color: 'from-emerald-500/15 to-green-600/10', textColor: 'text-emerald-400'},
-  { key: 'Strategy Market',      icon: 'fa-chart-line', color: 'from-amber-500/15 to-orange-600/10',  textColor: 'text-amber-400'  },
+  { 
+    key: 'Design & Art',         
+    icon: 'fa-palette',    
+    color: 'from-purple-500/15 to-violet-600/10', 
+    textColor: 'text-purple-400',
+    description: 'Analysis of visual elements, art aesthetics, art direction, character design, atmosphere, visual cohesion, and graphical quality of the game.'
+  },
+  { 
+    key: 'User Experience',      
+    icon: 'fa-user-circle',
+    color: 'from-sky-500/15 to-cyan-600/10',      
+    textColor: 'text-sky-400',
+    description: 'Evaluation of the interface, usability, accessibility, player flow, learning curve, controls, and general user satisfaction.'
+  },
+  { 
+    key: 'Technology Systems',   
+    icon: 'fa-microchip',  
+    color: 'from-emerald-500/15 to-green-600/10', 
+    textColor: 'text-emerald-400',
+    description: 'Technical analysis of the game engine, optimization, performance, stability, architecture, and underlying technology systems.'
+  },
+  { 
+    key: 'Strategy Market',      
+    icon: 'fa-chart-line', 
+    color: 'from-amber-500/15 to-orange-600/10',  
+    textColor: 'text-amber-400',
+    description: 'Strategic market evaluation, competitive positioning, business model, target demographics, and commercial potential.'
+  },
 ];
 
 function resolveSkillScore(scores: Record<string, number | null>, configKey: string): number | null {
@@ -522,47 +598,73 @@ function ReportPreviewModal({ report, onClose }: ReportPreviewModalProps) {
                 const weaknesses = structured?.weaknesses ?? [];
                 const hasDetail = summary || strengths.length > 0 || weaknesses.length > 0;
 
-                return (
-                  <div key={skill.key} className={`rounded-xl p-3 bg-gradient-to-br ${skill.color} border border-border flex flex-col gap-2`}>
-                    {/* Header row */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <i className={`fas ${skill.icon} text-xs ${skill.textColor} flex-shrink-0`} />
-                        <p className="text-xs font-semibold text-primary truncate">{skill.key}</p>
+return (
+                  <FlipCard 
+                    key={skill.key}
+                    className={`rounded-xl bg-gradient-to-br ${skill.color} border border-border flex flex-col min-h-[120px]`}
+                    tooltip={(
+                      <div className="h-full flex flex-col">
+                        <h3 className={`text-sm font-bold ${skill.textColor} leading-tight mb-2`}>{skill.key}</h3>
+                        <p className="text-xs text-muted leading-relaxed flex-1">{skill.description}</p>
                       </div>
-                      <span className={`text-sm font-black ${skill.textColor} flex-shrink-0 ml-1`}>
-                        {scoreDisplay != null ? scoreDisplay.toFixed(1) : '—'}
-                      </span>
-                    </div>
-
-                    {/* Score bar */}
-                    {barWidth != null ? (
-                      <div className="h-1 bg-black/20 rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full ${skill.textColor.replace('text-', 'bg-')}`} style={{ width: `${barWidth}%` }} />
-                      </div>
-                    ) : null}
-
-                    {/* LLM-generated detail */}
-                    {hasDetail ? (
-                      <div className="space-y-1.5 mt-0.5">
-                        {summary && (
-                          <p className="text-[10px] text-muted leading-snug line-clamp-2">{summary}</p>
-                        )}
-                        {strengths.slice(0, 2).map((s, i) => (
-                          <p key={i} className="text-[10px] text-success/80 flex gap-1 leading-snug">
-                            <span className="flex-shrink-0">+</span><span className="line-clamp-1">{s}</span>
-                          </p>
-                        ))}
-                        {weaknesses.slice(0, 1).map((w, i) => (
-                          <p key={i} className="text-[10px] text-gray-200 text-error/70 flex gap-1 leading-snug">
-                            <span className="flex-shrink-0">−</span><span className="line-clamp-1">{w}</span>
-                          </p>
-                        ))}
-                      </div>
-                    ) : (
-                      !barWidth && <p className="text-[10px] text-muted/60 italic">No data yet</p>
                     )}
-                  </div>
+                  >
+                    {({ setIsFlipped }) => (
+                      <div className={`rounded-xl p-3 bg-gradient-to-br ${skill.color} border border-border flex flex-col gap-2`}>
+                        {/* Header Row */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <i className={`fas ${skill.icon} text-xs ${skill.textColor} flex-shrink-0`} />
+                            <p className="text-xs font-semibold text-primary truncate">{skill.key}</p>
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-shrink-0 ml-1">
+                            {/* Tooltip trigger button */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setIsFlipped(true);
+                              }}
+                              className="tooltip-btn w-5 h-5 rounded-full bg-black/60 flex items-center justify-center text-white hover:bg-black/80 transition-all duration-200 hover:scale-110"
+                              title="Ver detalle"
+                            >
+                              <i className="fas fa-info text-[9px]" />
+                            </button>
+                            <span className={`text-sm font-black ${skill.textColor}`}>
+                              {scoreDisplay != null ? scoreDisplay.toFixed(1) : '—'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Score bar */}
+                        {barWidth != null ? (
+                          <div className="h-1 bg-black/20 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full ${skill.textColor.replace('text-', 'bg-')}`} style={{ width: `${barWidth}%` }} />
+                          </div>
+                        ) : null}
+
+                        {/* LLM-generated detail */}
+                        {hasDetail ? (
+                          <div className="space-y-1.5 mt-0.5">
+                            {summary && (
+                              <p className="text-[10px] text-muted leading-snug line-clamp-2">{summary}</p>
+                            )}
+                            {strengths.slice(0, 2).map((s, i) => (
+                              <p key={i} className="text-[10px] text-success/80 flex gap-1 leading-snug">
+                                <span className="flex-shrink-0">+</span><span className="line-clamp-1">{s}</span>
+                              </p>
+                            ))}
+                            {weaknesses.slice(0, 1).map((w, i) => (
+                              <p key={i} className="text-[10px] text-gray-200 text-error/70 flex gap-1 leading-snug">
+                                <span className="flex-shrink-0">−</span><span className="line-clamp-1">{w}</span>
+                              </p>
+                            ))}
+                          </div>
+                        ) : (
+                          !barWidth && <p className="text-[10px] text-muted/60 italic">No data yet</p>
+                        )}
+                      </div>
+                    )}
+                  </FlipCard>
                 );
               })}
             </div>

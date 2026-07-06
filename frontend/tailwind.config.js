@@ -30,6 +30,15 @@ module.exports = {
         'modal': '0 25px 50px rgba(0,0,0,0.6)',
         'glow': '0 0 30px rgba(59,130,246,0.15)',
       },
+      animation: {
+        'flip': 'flip 0.7s ease-in-out',
+      },
+      keyframes: {
+        flip: {
+          '0%': { transform: 'rotateY(0deg)' },
+          '100%': { transform: 'rotateY(180deg)' }
+        }
+      },
     },
   },
   plugins: [],

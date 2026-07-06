@@ -27,7 +27,7 @@ SORT_COLUMN_MAP = {
 
 
 class ReportService:
-    def __init__(self, db: AsyncSession, user_id: UUID):
+    def __init__(self, db: AsyncSession, user_id: Optional[UUID] = None):
         self.db = db
         self.user_id = user_id
 
