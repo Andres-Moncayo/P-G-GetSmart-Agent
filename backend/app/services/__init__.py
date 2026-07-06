@@ -45,6 +45,38 @@ class ReportService:
         page: int = 1,
         page_size: int = 12,
     ) -> ReportListResponse:
+        from app.db.connection import IS_DATABASE_ONLINE
+        if not IS_DATABASE_ONLINE:
+            from app.db.mock_data import MockDatabaseManager
+            items, total = MockDatabaseManager.list_reports(
+                genre=genre,
+                developer=developer,
+                platform=platform,
+                status=status,
+                year_from=year_from,
+                year_to=year_to,
+                search=search,
+                sort_by=sort_by,
+                sort_dir=sort_dir,
+                page=page,
+                page_size=page_size
+            )
+            total_pages = (total + page_size - 1) // page_size if total else 0
+            pagination = Pagination(
+                page=page,
+                page_size=page_size,
+                total=total,
+                total_pages=total_pages,
+                has_next=page < total_pages,
+                has_prev=page > 1,
+            )
+            facets = MockDatabaseManager.get_facets()
+            return ReportListResponse(
+                items=[self._row_to_report(item) for item in items],
+                pagination=pagination,
+                facets=facets,
+            )
+
         filters = ["TRUE"]
         params: Dict[str, Any] = {}
 
@@ -132,6 +164,14 @@ class ReportService:
         )
 
     async def get_report(self, report_id: UUID) -> Optional[Report]:
+        from app.db.connection import IS_DATABASE_ONLINE
+        if not IS_DATABASE_ONLINE:
+            from app.db.mock_data import MockDatabaseManager
+            item = MockDatabaseManager.get_report(report_id)
+            if not item:
+                return None
+            return self._row_to_report(item)
+
         query = text(
             f"""
             SELECT *
@@ -148,6 +188,23 @@ class ReportService:
     async def get_report_content(
         self, report_id: UUID, format: str
     ) -> Optional[Dict[str, Any]]:
+        from app.db.connection import IS_DATABASE_ONLINE
+        if not IS_DATABASE_ONLINE:
+            from app.db.mock_data import MockDatabaseManager
+            item = MockDatabaseManager.get_report(report_id)
+            if not item:
+                return None
+            available_formats = {}
+            if item.markdown_content or item.url_markdown:
+                available_formats["markdown"] = {
+                    "content_url": item.url_markdown or "",
+                    "download_url": item.url_markdown,
+                    "content": item.markdown_content,
+                }
+            if format not in available_formats:
+                return None
+            return {"format": format, **available_formats[format]}
+
         query = text(
             f"""
             SELECT id, game_name, markdown_content, url_markdown, url_json,
@@ -189,6 +246,14 @@ class ReportService:
         return {"format": format, **available_formats[format]}
 
     async def get_report_pdf_url(self, report_id: UUID) -> Optional[str]:
+        from app.db.connection import IS_DATABASE_ONLINE
+        if not IS_DATABASE_ONLINE:
+            from app.db.mock_data import MockDatabaseManager
+            item = MockDatabaseManager.get_report(report_id)
+            if not item or not item.url_pdf:
+                return None
+            return item.url_pdf
+
         query = text(
             f"""
             SELECT url_pdf, pdf_generated
@@ -208,6 +273,14 @@ class ReportService:
         tags: Optional[List[str]] = None,
         notes: Optional[str] = None,
     ) -> Optional[Report]:
+        from app.db.connection import IS_DATABASE_ONLINE
+        if not IS_DATABASE_ONLINE:
+            from app.db.mock_data import MockDatabaseManager
+            item = MockDatabaseManager.update_report(report_id, tags=tags, notes=notes)
+            if not item:
+                return None
+            return self._row_to_report(item)
+
         if tags is None and notes is None:
             return await self.get_report(report_id)
 
@@ -234,6 +307,10 @@ class ReportService:
         return self._row_to_report(report_orm)
 
     async def delete_report(self, report_id: UUID) -> bool:
+        from app.db.connection import IS_DATABASE_ONLINE
+        if not IS_DATABASE_ONLINE:
+            return False
+
         query = text(
             f"""
             DELETE FROM {TABLE_REPORTS}
@@ -246,6 +323,10 @@ class ReportService:
         return result.first() is not None
 
     async def get_facets(self) -> Facets:
+        from app.db.connection import IS_DATABASE_ONLINE
+        if not IS_DATABASE_ONLINE:
+            from app.db.mock_data import MockDatabaseManager
+            return MockDatabaseManager.get_facets()
         return await self._get_facets()
 
     def _row_to_report(self, row) -> Report:

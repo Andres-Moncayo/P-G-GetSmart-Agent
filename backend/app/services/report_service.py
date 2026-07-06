@@ -29,6 +29,9 @@ class ReportService:
         self._analysis_repo: Optional[AnalysisRepository] = None
 
     async def _init(self):
+        from ..db.connection import IS_DATABASE_ONLINE
+        if not IS_DATABASE_ONLINE:
+            return
         if not self._db:
             self._db = AsyncSessionLocal()
             self._report_repo = ReportRepository(self._db)
@@ -74,6 +77,31 @@ class ReportService:
         cover_url: Optional[str] = None,
     ) -> Report:
         """Insert a 'processing' row in `reports` and return the ORM object."""
+        from ..db.connection import IS_DATABASE_ONLINE
+        if not IS_DATABASE_ONLINE:
+            from ..db.mock_data import MockDatabaseManager
+            report_uuid = uuid.uuid4()
+            db_game_id = game_id if self._is_uuid(game_id) else str(uuid.uuid4())
+            data = {
+                "id": report_uuid,
+                "user_id": uuid.UUID(user_id) if self._is_uuid(user_id) else uuid.UUID(DEMO_USER_ID),
+                "game_id": uuid.UUID(db_game_id) if self._is_uuid(db_game_id) else uuid.uuid4(),
+                "report_status": "processing",
+                "report_type": "comprehensive",
+                "game_name": game_name,
+                "game_slug": game_name.lower().replace(" ", "-"),
+                "developer_name": developer_name,
+                "release_year": release_year,
+                "primary_genre": primary_genre,
+                "primary_platform": primary_platform or platform,
+                "all_genres": all_genres or [],
+                "all_platforms": all_platforms or [],
+                "cover_url": cover_url,
+                "current_phase": "scraping",
+                "pipeline_progress": 0,
+            }
+            return MockDatabaseManager.create_report(data)
+
         await self._init()
         report_uuid = uuid.uuid4()
         # Use game_id as-is if it's a UUID, otherwise generate a fresh one
@@ -126,6 +154,19 @@ class ReportService:
         started_at: Optional[datetime] = None,
     ) -> Report:
         """Persist synthesis output and create per-skill Analysis rows."""
+        from ..db.connection import IS_DATABASE_ONLINE
+        if not IS_DATABASE_ONLINE:
+            from ..db.mock_data import MockDatabaseManager
+            r_uuid = uuid.UUID(report_id) if self._is_uuid(report_id) else report_id
+            update_data = {
+                "markdown_content": markdown_content,
+                "executive_summary_jsonb": master_json.get("synthesis", master_json),
+                "report_status": "completed",
+                "pipeline_progress": 100,
+            }
+            MockDatabaseManager.update_report_fields(r_uuid, update_data)
+            return MockDatabaseManager.get_report(r_uuid)
+
         await self._init()
 
         skill_map = {
@@ -184,6 +225,24 @@ class ReportService:
         phase_data: Dict = None,
     ) -> bool:
         """Persist pipeline phase/progress to the reports row."""
+        from ..db.connection import IS_DATABASE_ONLINE
+        if not IS_DATABASE_ONLINE:
+            from ..db.mock_data import MockDatabaseManager
+            r_uuid = uuid.UUID(report_id) if self._is_uuid(report_id) else report_id
+            update_data = {}
+            if phase:
+                update_data["current_phase"] = phase
+            if progress is not None:
+                update_data["pipeline_progress"] = min(max(int(progress), 0), 100)
+            if status == "failed":
+                update_data["report_status"] = "failed"
+            elif status == "completed" and phase in ("phase4", "synthesis", "storage"):
+                update_data["report_status"] = "completed"
+                update_data["pipeline_progress"] = 100
+            if update_data:
+                return MockDatabaseManager.update_report_fields(r_uuid, update_data)
+            return True
+
         try:
             await self._init()
             update_data: Dict[str, Any] = {}
@@ -211,5 +270,11 @@ class ReportService:
         return True
 
     async def get_report_by_id(self, report_id: str) -> Optional[Report]:
+        from ..db.connection import IS_DATABASE_ONLINE
+        if not IS_DATABASE_ONLINE:
+            from ..db.mock_data import MockDatabaseManager
+            r_uuid = uuid.UUID(report_id) if self._is_uuid(report_id) else report_id
+            return MockDatabaseManager.get_report(r_uuid)
+
         await self._init()
         return await self._report_repo.get_by_id(report_id)

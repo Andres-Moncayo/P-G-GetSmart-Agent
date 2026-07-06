@@ -417,6 +417,50 @@ class PipelineTracker:
     def get_pipeline_status(self, report_id: str) -> Optional[DetailedPipelineResponse]:
         """Get detailed status of a pipeline."""
         if report_id not in self.active_pipelines:
+            from app.db.connection import IS_DATABASE_ONLINE
+            if not IS_DATABASE_ONLINE:
+                import uuid
+                from app.db.mock_data import MockDatabaseManager
+                try:
+                    r_id = uuid.UUID(report_id)
+                except ValueError:
+                    return None
+                mock_rep = MockDatabaseManager.get_report(r_id)
+                if mock_rep:
+                    is_done = mock_rep.report_status == "completed"
+                    status_val = TaskStatus.COMPLETED if is_done else TaskStatus.RUNNING
+                    phase_val = Phase.STORAGE if is_done else Phase.ANALYSIS
+                    prog_val = float(mock_rep.pipeline_progress)
+                    
+                    return DetailedPipelineResponse(
+                        report_id=report_id,
+                        phase=phase_val,
+                        status=status_val,
+                        is_complete=is_done,
+                        message="Pipeline completed successfully" if is_done else f"Pipeline running - {phase_val.value} phase",
+                        seconds_elapsed=120.0 if is_done else 45.0,
+                        seconds_remaining=None,
+                        current_phase_progress=100.0 if is_done else 50.0,
+                        overall_progress=prog_val,
+                        result=None,
+                        tasks_succeeded=4 if is_done else 2,
+                        tasks_failed=0,
+                        tasks_skipped=0,
+                        tasks_total=4,
+                        phases={
+                            Phase.SCRAPING: {"status": TaskStatus.COMPLETED, "progress": 100.0, "started_at": None, "completed_at": None, "tasks": [], "api_calls": []},
+                            Phase.ANALYSIS: {"status": TaskStatus.COMPLETED if is_done else TaskStatus.RUNNING, "progress": 100.0 if is_done else 50.0, "started_at": None, "completed_at": None, "tasks": [], "api_calls": []},
+                            Phase.SYNTHESIS: {"status": TaskStatus.COMPLETED if is_done else TaskStatus.WAITING, "progress": 100.0 if is_done else 0.0, "started_at": None, "completed_at": None, "tasks": [], "api_calls": []},
+                            Phase.STORAGE: {"status": TaskStatus.COMPLETED if is_done else TaskStatus.WAITING, "progress": 100.0 if is_done else 0.0, "started_at": None, "completed_at": None, "tasks": [], "api_calls": []},
+                        },
+                        api_calls=[],
+                        current_task=None,
+                        logs=[{"timestamp": datetime.utcnow(), "level": "info", "message": "Pipeline started"}],
+                        scraping_durations={},
+                        analysis_durations={},
+                        total_records_processed=100 if is_done else 20,
+                        db_report_id=report_id
+                    )
             return None
         
         pipeline = self.active_pipelines[report_id]

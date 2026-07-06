@@ -28,5 +28,10 @@ app.include_router(scraper_router, prefix="/scraper")
 
 @app.on_event("startup")
 async def startup():
+    from .db.connection import check_database_connection
+    is_online = await check_database_connection()
+    if is_online:
+        print("DATABASE STATUS: ONLINE")
+    else:
+        print("DATABASE STATUS: OFFLINE. Running in Mock Mode fallback!")
     await CacheManager.init_cache()
-    # Schema is applied externally via UnityGsmart.sql — do NOT create_all here

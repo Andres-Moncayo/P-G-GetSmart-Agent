@@ -55,9 +55,24 @@ DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 engine = create_async_engine(DATABASE_URL, echo=DEBUG, connect_args=CONNECT_ARGS)
 AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
+IS_DATABASE_ONLINE = True
+
+async def check_database_connection() -> bool:
+    global IS_DATABASE_ONLINE
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        IS_DATABASE_ONLINE = True
+        return True
+    except Exception:
+        IS_DATABASE_ONLINE = False
+        return False
 
 async def get_db() -> AsyncSession:
     """Get async database session."""
+    if not IS_DATABASE_ONLINE:
+        yield None
+        return
     async with AsyncSessionLocal() as session:
         try:
             yield session
@@ -67,6 +82,9 @@ async def get_db() -> AsyncSession:
 
 async def get_async_session():
     """Get async database session for report_service."""
+    if not IS_DATABASE_ONLINE:
+        yield None
+        return
     async with AsyncSessionLocal() as session:
         yield session
 
