@@ -351,12 +351,12 @@ class ApiClient {
     this.client.interceptors.response.use(
       (response) => response,
       async (error) => {
-        // Intercept network errors or Vite proxy errors (502, 503, 504) to apply the Frontend Serverless Mock Fallback
+        // Intercept network errors, proxy errors, or 404 static hosting errors (no backend exists) to apply mock fallback
         const status = error.response?.status;
-        if (!error.response || error.code === 'ERR_NETWORK' || status === 502 || status === 503 || status === 504) {
+        if (!error.response || error.code === 'ERR_NETWORK' || status === 404 || status === 502 || status === 503 || status === 504) {
           const fallbackResponse = handleMockFallback(error.config);
           if (fallbackResponse) {
-            console.warn("Vite HTTP proxy connection refused or returned error. Falling back to frontend serverless mock data!");
+            console.warn("API request failed. Falling back to frontend serverless mock data!");
             return fallbackResponse;
           }
         }
