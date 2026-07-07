@@ -354,7 +354,24 @@ class ApiClient {
     });
 
     this.client.interceptors.response.use(
-      (response) => response,
+      (response) => {
+        // If the response is successful (200 OK) but the content is HTML (SPA redirect from hosting),
+        // we treat it as an error/failure so we can fallback to mock data!
+        const contentType = response.headers?.['content-type'] || '';
+        const isHtmlString = typeof response.data === 'string' && 
+          (response.data.trim().startsWith('<!DOCTYPE') || 
+           response.data.trim().startsWith('<html') || 
+           response.data.trim().startsWith('<div id="root"'));
+        
+        if (contentType.includes('text/html') || isHtmlString) {
+          const fallbackResponse = handleMockFallback(response.config);
+          if (fallbackResponse) {
+            console.warn("API request returned HTML (SPA Redirect). Falling back to mock data!");
+            return fallbackResponse;
+          }
+        }
+        return response;
+      },
       async (error) => {
         // Intercept network errors, proxy errors, or 404 static hosting errors (no backend exists) to apply mock fallback
         const status = error.response?.status;
